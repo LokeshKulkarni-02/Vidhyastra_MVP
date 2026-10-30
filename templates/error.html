@@ -1,0 +1,1 @@
+{% extends 'base.html' %}{% block title %}{{ code }} · Vidhyastra{% endblock %}{% block content %}<section class="result-wrap"><span class="eyebrow">{{ code }} · OOPS</span><h1>Let's get you back on track.</h1><p>{{ message }}</p><a class="button primary" href="{{ url_for('dashboard') if current_user else url_for('index') }}">Back to safety →</a></section>{% endblock %}
