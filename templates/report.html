@@ -1,1 +1,112 @@
-{% extends 'base.html' %}{% block title %}Progress report · Vidhyastra{% endblock %}{% block content %}<section class="dashboard-head"><div><span class="eyebrow">LEARNING REPORT · {{ attempts['n'] }} MONTHLY ATTEMPTS</span><h1>{{ student['name'] }}'s progress</h1><p>Evidence to guide the next learning step, not a label of ability.</p></div><div class="roll-card"><small>ROLL NUMBER</small><strong>{{ student['roll_no'] or '—' }}</strong><span>{{ student['grade'] }} · {{ student['board'] }}</span></div></section><section class="stats-grid"><article class="stat-card"><small>Questions this month</small><strong>{{ attempts['n'] }}</strong></article><article class="stat-card"><small>Correct this month</small><strong>{{ attempts['correct'] }}</strong></article><article class="stat-card"><small>Topics with tracked activity</small><strong>{{ progress|length }}</strong></article></section><section class="section-head"><div><span class="eyebrow">TOPIC BREAKDOWN</span><h2>Learning evidence</h2></div></section><div class="panel">{% if progress %}{% for p in progress %}<div class="report-row"><div><b>{{ p.subject }} · {{ p.topic }}</b><small>{{ p.attempts }} attempts · Last active {{ p.last_seen[:10] }}</small></div><div class="report-score"><strong>{{ ((p.correct / p.attempts)*100)|round|int if p.attempts else 0 }}%</strong><div class="bar"><span style="width:{{ ((p.correct / p.attempts)*100)|round|int if p.attempts else 0 }}%"></span></div></div></div>{% endfor %}{% else %}<p class="muted">No practice data recorded yet. Try a short quiz to start building a learning history.</p>{% endif %}<p class="tiny-note">This report reflects activity recorded in the prototype, not a formal school assessment. Monthly parent reports would require a scheduled reporting workflow in production.</p></div><a class="button secondary" href="{{ url_for('dashboard') }}">← Back to dashboard</a>{% endblock %}
+{% extends 'base.html' %}
+
+{% block title %}Progress report · Vidhyastra{% endblock %}
+
+{% block content %}
+
+<section class="dashboard-head">
+    <div>
+        <span class="eyebrow">LEARNING REPORT · {{ attempts['n'] }} MONTHLY ATTEMPTS</span>
+        <h1>{{ student['name'] }}'s progress</h1>
+        <p>Evidence to guide the next learning step, not a label of ability.</p>
+    </div>
+
+    <div class="roll-card">
+        <small>ROLL NUMBER</small>
+        <strong>{{ student['roll_no'] or '—' }}</strong>
+        <span>{{ student['grade'] }} · {{ student['board'] }}</span>
+        <div class="roll-xp-tag">
+            <span class="xp-bolt">⚡</span> <strong>{{ total_xp }}</strong> Total XP
+        </div>
+    </div>
+</section>
+
+<section class="stats-grid stats-grid-4">
+    <article class="stat-card xp-stat-card">
+        <span class="stat-icon gold">⚡</span>
+        <small>Total Experience (XP)</small>
+        <strong>{{ total_xp }} <span class="xp-sub">XP</span></strong>
+        <span class="muted">Earned across all subjects</span>
+    </article>
+
+    <article class="stat-card">
+        <span class="stat-icon purple">◷</span>
+        <small>Questions this month</small>
+        <strong>{{ attempts['n'] }}</strong>
+        <span class="muted">Consistent practice</span>
+    </article>
+
+    <article class="stat-card">
+        <span class="stat-icon green">✓</span>
+        <small>Correct this month</small>
+        <strong>{{ attempts['correct'] }}</strong>
+        <span class="muted">Demonstrated mastery</span>
+    </article>
+
+    <article class="stat-card">
+        <span class="stat-icon orange">◎</span>
+        <small>Active topics</small>
+        <strong>{{ progress|length }}</strong>
+        <span class="muted">Concept coverage</span>
+    </article>
+</section>
+
+<section class="section-head">
+    <div>
+        <span class="eyebrow">SUBJECT MASTERY & EXPERIENCE</span>
+        <h2>Subject XP Breakdown</h2>
+    </div>
+</section>
+
+<div class="panel">
+    <div class="form-grid">
+        {% for sub, xp_val in subject_xp.items() %}
+        <div class="report-row" style="border-bottom: 1px solid #f0f1f7; padding: 12px 0;">
+            <div>
+                <b>{{ sub }}</b>
+                <small>Base: 100 XP</small>
+            </div>
+            <strong class="xp-val">⚡ {{ xp_val }} XP</strong>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<section class="section-head">
+    <div>
+        <span class="eyebrow">TOPIC BREAKDOWN</span>
+        <h2>Learning evidence</h2>
+    </div>
+</section>
+
+<div class="panel">
+    {% if progress %}
+        {% for p in progress %}
+        <div class="report-row">
+            <div>
+                <b>{{ p.subject }} · {{ p.topic }}</b>
+                <small>{{ p.attempts }} attempts · Last active {{ p.last_seen[:10] }}</small>
+            </div>
+
+            <div class="report-score">
+                <strong>{{ ((p.correct / p.attempts)*100)|round|int if p.attempts else 0 }}%</strong>
+                <div class="bar">
+                    <span style="width:{{ ((p.correct / p.attempts)*100)|round|int if p.attempts else 0 }}%"></span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <p class="muted">No practice data recorded yet. Try a short quiz to start building a learning history.</p>
+    {% endif %}
+
+    <p class="tiny-note">
+        This report reflects activity recorded in the prototype, not a formal school assessment.
+    </p>
+</div>
+
+<div style="margin: 24px 0;">
+    <a class="button secondary" href="{{ url_for('dashboard') }}">← Back to dashboard</a>
+</div>
+
+{% endblock %}

@@ -1,4 +1,3 @@
-
 {% extends 'base.html' %}
 
 {% block title %}Student dashboard · Vidhyastra{% endblock %}
@@ -9,17 +8,27 @@
     <div>
         <span class="eyebrow">STUDENT SPACE · {{ user['grade'] or 'YOUR CLASS' }}</span>
         <h1>Hey, {{ user['name'].split(' ')[0] }} <span class="wave">✦</span></h1>
-        <p>Your pace is personal. Let's make today's progress count.</p>
+        <p>Your pace is personal. Earn XP, track your standing, and make today's progress count.</p>
     </div>
 
     <div class="roll-card">
         <small>YOUR ROLL NUMBER</small>
         <strong>{{ user['roll_no'] }}</strong>
-        <span>{{ user['board'] or 'Board not set' }} · {{ user['state'] or 'State not set' }}</span>
+        <span>{{ user['board'] or 'Board not set' }} · {{ user['grade'] or 'Class' }}</span>
+        <div class="roll-xp-tag">
+            <span class="xp-bolt">⚡</span> <strong>{{ total_xp }}</strong> Total XP
+        </div>
     </div>
 </section>
 
-<section class="stats-grid">
+<section class="stats-grid stats-grid-4">
+    <article class="stat-card xp-stat-card">
+        <span class="stat-icon gold">⚡</span>
+        <small>Class Experience</small>
+        <strong>{{ total_xp }} <span class="xp-sub">XP</span></strong>
+        <span class="muted rank-callout">🏆 <b>Rank #{{ my_rank }}</b> in {{ user['grade'] or 'Class' }}</span>
+    </article>
+
     <article class="stat-card">
         <span class="stat-icon purple">◷</span>
         <small>Questions attempted</small>
@@ -36,20 +45,20 @@
 
     <article class="stat-card">
         <span class="stat-icon orange">◎</span>
-        <small>Session requests used</small>
+        <small>Session requests</small>
         <strong>{{ open_tickets }} / 2</strong>
-        <span class="muted">Weekly allowance planned; prototype counter is monthly</span>
+        <span class="muted">Weekly 1:1 teacher limit</span>
     </article>
 </section>
 
 <section class="section-head">
     <div>
         <span class="eyebrow">YOUR LEARNING PATH</span>
-        <h2>Subject progress</h2>
+        <h2>Subject progress & XP</h2>
     </div>
 
-    <a class="text-link" href="{{ url_for('report',student_id=user['id']) }}">
-        View report ↗
+    <a class="text-link" href="{{ url_for('report', student_id=user['id']) }}">
+        View full report ↗
     </a>
 </section>
 
@@ -61,7 +70,10 @@
             <div class="subject-badge math">∑</div>
 
             <div class="subject-info">
-                <h3>Mathematics</h3>
+                <div class="subject-title-row">
+                    <h3>Mathematics</h3>
+                    <span class="subject-xp-badge">⚡ {{ subject_xp.get('Mathematics', 100) }} XP</span>
+                </div>
                 <p>Fractions · Percentages · Linear equations</p>
 
                 <div class="bar">
@@ -69,8 +81,8 @@
                 </div>
             </div>
 
-            <a class="button small primary" href="{{ url_for('quiz',subject='Mathematics',topic='Fractions') }}">
-                Practice
+            <a class="button small primary" href="{{ url_for('quiz', subject='Mathematics', topic='Fractions') }}">
+                Practice (+20 XP)
             </a>
         </div>
 
@@ -78,7 +90,10 @@
             <div class="subject-badge science">✧</div>
 
             <div class="subject-info">
-                <h3>Science</h3>
+                <div class="subject-title-row">
+                    <h3>Science</h3>
+                    <span class="subject-xp-badge">⚡ {{ subject_xp.get('Science', 100) }} XP</span>
+                </div>
                 <p>Cells · Force and motion</p>
 
                 <div class="bar">
@@ -86,8 +101,8 @@
                 </div>
             </div>
 
-            <a class="button small secondary" href="{{ url_for('quiz',subject='Science',topic='Cells') }}">
-                Practice
+            <a class="button small secondary" href="{{ url_for('quiz', subject='Science', topic='Cells') }}">
+                Practice (+20 XP)
             </a>
         </div>
 
@@ -95,7 +110,10 @@
             <div class="subject-badge english">Aa</div>
 
             <div class="subject-info">
-                <h3>English</h3>
+                <div class="subject-title-row">
+                    <h3>English</h3>
+                    <span class="subject-xp-badge">⚡ {{ subject_xp.get('English', 100) }} XP</span>
+                </div>
                 <p>Grammar and communication</p>
 
                 <div class="bar">
@@ -103,14 +121,13 @@
                 </div>
             </div>
 
-            <a class="button small secondary" href="{{ url_for('quiz',subject='English',topic='Grammar') }}">
-                Practice
+            <a class="button small secondary" href="{{ url_for('quiz', subject='English', topic='Grammar') }}">
+                Practice (+20 XP)
             </a>
         </div>
 
         <p class="tiny-note">
-            Progress bars show prototype topic activity, not official syllabus completion.
-            Teachers can add and map board-specific topics in a future version.
+            Every student starts with 100 base XP per subject (600 base overall). Correct answers earn +20 XP.
         </p>
 
     </div>
@@ -131,14 +148,157 @@
         <div class="mini-tip">
             ✧
             <span>
-                <b>Today's tip</b><br>
-                Try a fresh question after reviewing an example.
+                <b>XP Tip</b><br>
+                Practice daily in all subjects to climb the class leaderboard.
             </span>
         </div>
     </aside>
 
 </div>
 
+<!-- CLASS LEADERBOARD SECTION -->
+<section class="section-head" id="leaderboard">
+    <div>
+        <span class="eyebrow">CLASS ARENA · {{ user['grade'] or 'CLASS' }}</span>
+        <h2>Class Leaderboard</h2>
+        <p class="muted">Live rankings among all students in {{ user['grade'] or 'your class' }}.</p>
+    </div>
+
+    <div class="lb-subject-picker">
+        <a href="{{ url_for('dashboard', lb_subject='overall') }}#leaderboard"
+           class="lb-tab {% if lb_subject == 'overall' %}active{% endif %}">
+           ⚡ Overall
+        </a>
+        <a href="{{ url_for('dashboard', lb_subject='Mathematics') }}#leaderboard"
+           class="lb-tab {% if lb_subject == 'Mathematics' %}active{% endif %}">
+           Maths
+        </a>
+        <a href="{{ url_for('dashboard', lb_subject='Science') }}#leaderboard"
+           class="lb-tab {% if lb_subject == 'Science' %}active{% endif %}">
+           Science
+        </a>
+        <a href="{{ url_for('dashboard', lb_subject='English') }}#leaderboard"
+           class="lb-tab {% if lb_subject == 'English' %}active{% endif %}">
+           English
+        </a>
+    </div>
+</section>
+
+<div class="panel leaderboard-panel">
+
+    <!-- RIVAL RADAR (Comparison with person above and below) -->
+    <div class="rival-radar-grid">
+
+        <!-- PERSON DIRECTLY ABOVE -->
+        {% if student_ahead %}
+        <div class="rival-card rival-ahead">
+            <span class="rival-tag tag-ahead">⚡ NEXT TARGET · RANK #{{ student_ahead.rank }}</span>
+            <h4>{{ student_ahead.name }}</h4>
+            <div class="rival-metric">
+                <strong>{{ student_ahead.xp }} XP</strong>
+                <span class="gap-badge">Only {{ student_ahead.xp_diff }} XP to pass!</span>
+            </div>
+            <small>💡 Passing 1 quiz (+20 XP) can boost you ahead!</small>
+        </div>
+        {% else %}
+        <div class="rival-card rival-lead">
+            <span class="rival-tag tag-lead">👑 CLASS LEADER</span>
+            <h4>You are Rank #1!</h4>
+            <div class="rival-metric">
+                <strong>{{ total_xp if lb_subject == 'overall' else subject_xp.get(lb_subject, 100) }} XP</strong>
+                <span class="gap-badge gold-bg">Current Champion</span>
+            </div>
+            <small>✨ Great work! Keep practicing to protect your #1 spot.</small>
+        </div>
+        {% endif %}
+
+        <!-- CURRENT STUDENT -->
+        <div class="rival-card rival-current">
+            <span class="rival-tag tag-you">YOU ARE HERE</span>
+            <h4>Rank #{{ my_rank }} in {{ user['grade'] }}</h4>
+            <div class="rival-metric">
+                <strong>{{ total_xp if lb_subject == 'overall' else subject_xp.get(lb_subject, 100) }} XP</strong>
+                <span class="gap-badge you-bg">{% if lb_subject == 'overall' %}Overall Total{% else %}{{ lb_subject }}{% endif %}</span>
+            </div>
+            <small>Roll No: {{ user['roll_no'] }} · Base: 100 XP per subject</small>
+        </div>
+
+        <!-- PERSON DIRECTLY BELOW -->
+        {% if student_behind %}
+        <div class="rival-card rival-behind">
+            <span class="rival-tag tag-behind">🛡️ DEFENDING AGAINST · RANK #{{ student_behind.rank }}</span>
+            <h4>{{ student_behind.name }}</h4>
+            <div class="rival-metric">
+                <strong>{{ student_behind.xp }} XP</strong>
+                <span class="gap-badge safe-badge">{{ student_behind.xp_diff }} XP behind you</span>
+            </div>
+            <small>🚀 Stay active with practice to keep your lead safe.</small>
+        </div>
+        {% else %}
+        <div class="rival-card rival-none">
+            <span class="rival-tag tag-neutral">RIVAL RADAR</span>
+            <h4>End of the Table</h4>
+            <div class="rival-metric">
+                <strong>No one behind you yet</strong>
+            </div>
+            <small>📈 Solve more quizzes to climb up the leaderboard!</small>
+        </div>
+        {% endif %}
+
+    </div>
+
+    <!-- FULL LEADERBOARD TABLE -->
+    <div class="lb-table-wrap">
+        <table class="lb-table">
+            <thead>
+                <tr>
+                    <th style="width: 75px;">Rank</th>
+                    <th>Student Name</th>
+                    <th>Roll Number</th>
+                    <th>Class</th>
+                    <th style="text-align: right;">Experience (XP)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in leaderboard %}
+                <tr class="{% if entry.is_current %}lb-row-active{% endif %}">
+                    <td>
+                        <span class="rank-badge rank-{{ entry.rank }}">
+                            {% if entry.rank == 1 %}🥇 1
+                            {% elif entry.rank == 2 %}🥈 2
+                            {% elif entry.rank == 3 %}🥉 3
+                            {% else %}{{ entry.rank }}{% endif %}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="lb-student-col">
+                            <div class="avatar small-av">{{ entry.name[:1] }}</div>
+                            <div>
+                                <b>{{ entry.name }}</b>
+                                {% if entry.is_current %}<span class="pill you-pill">You</span>{% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    <td><span class="font-mono text-muted">{{ entry.roll_no or '—' }}</span></td>
+                    <td><span class="class-pill">{{ entry.grade }}</span></td>
+                    <td style="text-align: right;">
+                        <strong class="xp-val">⚡ {{ entry.xp }} XP</strong>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="muted" style="text-align: center; padding: 25px;">
+                        No other students registered in {{ user['grade'] }} yet. You are currently leading the board!
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+<!-- TEACHER SUPPORT -->
 <section class="section-head">
     <div>
         <span class="eyebrow">TEACHER SUPPORT</span>
@@ -174,31 +334,29 @@
 
     {% endif %}
 
-    <form class="inline-form" method="post"
-      action="{{ url_for('create_ticket') }}">
+    <form class="inline-form" method="post" action="{{ url_for('create_ticket') }}">
 
-    <input type="hidden" name="kind" value="Student session">
+        <input type="hidden" name="kind" value="Student session">
 
-    <input name="message"
-           placeholder="What would you like help with?"
-           required>
+        <input name="message"
+               placeholder="What would you like help with?"
+               required>
 
-    <select name="subject" required>
-        <option value="">Select subject</option>
+        <select name="subject" required>
+            <option value="">Select subject</option>
 
-        {% for a in allocations %}
-        <option value="{{ a.subject }}">{{ a.subject }}</option>
-        {% endfor %}
-    </select>
+            {% for a in allocations %}
+            <option value="{{ a.subject }}">{{ a.subject }}</option>
+            {% endfor %}
+        </select>
 
-    <button class="button primary" type="submit">
-        Request 1:1 session
-    </button>
-</form>
+        <button class="button primary" type="submit">
+            Request 1:1 session
+        </button>
+    </form>
 
     <small class="muted">
-        Session-request limits and scheduling are demo behavior;
-        confirm the intended weekly policy before production.
+        Weekly limit: 2 1:1 sessions per student.
     </small>
 
 </div>

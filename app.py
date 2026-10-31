@@ -38,6 +38,9 @@ SUBJECTS = [
     'Telugu'
 ]
 
+BASE_XP_PER_SUBJECT = 100
+CORRECT_ANSWER_XP = 20
+
 
 # --------------------------------------------------
 # QUESTION BANK
@@ -247,8 +250,28 @@ def init_db():
         FOREIGN KEY(student_id) REFERENCES users(id)
     );
 
+    CREATE TABLE IF NOT EXISTS student_xp (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        student_id INTEGER NOT NULL,
+        subject TEXT NOT NULL,
+        xp INTEGER DEFAULT 100,
+        UNIQUE(student_id, subject),
+        FOREIGN KEY(student_id) REFERENCES users(id)
+    );
+
     ''')
 
+    con.commit()
+
+    # Ensure all existing students have base XP for all subjects
+    existing_students = con.execute("SELECT id FROM users WHERE role='student'").fetchall()
+    for s in existing_students:
+        for sub in SUBJECTS:
+            con.execute('''
+                INSERT INTO student_xp (student_id, subject, xp)
+                VALUES (?, ?, ?)
+                ON CONFLICT(student_id, subject) DO NOTHING
+            ''', (s['id'], sub, BASE_XP_PER_SUBJECT))
     con.commit()
 
     # Create the first administrator from environment variables.
@@ -309,6 +332,131 @@ def assign_class_teachers(student_id, grade, board, con):
             assignment['teacher_id'],
             assignment['subject']
         ))
+
+
+# --------------------------------------------------
+# EXPERIENCE POINTS (XP) AND LEADERBOARD SYSTEM
+# --------------------------------------------------
+
+def ensure_student_xp(student_id, con):
+    for sub in SUBJECTS:
+        con.execute('''
+            INSERT INTO student_xp (student_id, subject, xp)
+            VALUES (?, ?, ?)
+            ON CONFLICT(student_id, subject) DO NOTHING
+        ''', (student_id, sub, BASE_XP_PER_SUBJECT))
+
+
+def award_quiz_xp(student_id, subject, con):
+    ensure_student_xp(student_id, con)
+    con.execute('''
+        UPDATE student_xp
+        SET xp = xp + ?
+        WHERE student_id = ? AND subject = ?
+    ''', (CORRECT_ANSWER_XP, student_id, subject))
+
+    subj_row = con.execute('''
+        SELECT xp FROM student_xp WHERE student_id = ? AND subject = ?
+    ''', (student_id, subject)).fetchone()
+
+    tot_row = con.execute('''
+        SELECT SUM(xp) AS total FROM student_xp WHERE student_id = ?
+    ''', (student_id,)).fetchone()
+
+    new_sub_xp = subj_row['xp'] if subj_row else BASE_XP_PER_SUBJECT
+    new_tot_xp = tot_row['total'] if (tot_row and tot_row['total'] is not None) else (BASE_XP_PER_SUBJECT * len(SUBJECTS))
+
+    return CORRECT_ANSWER_XP, new_sub_xp, new_tot_xp
+
+
+def get_student_xp_summary(student_id, con):
+    ensure_student_xp(student_id, con)
+    rows = con.execute('''
+        SELECT subject, xp FROM student_xp WHERE student_id = ?
+    ''', (student_id,)).fetchall()
+    xp_by_sub = {r['subject']: r['xp'] for r in rows}
+    for sub in SUBJECTS:
+        if sub not in xp_by_sub:
+            xp_by_sub[sub] = BASE_XP_PER_SUBJECT
+    total = sum(xp_by_sub.values())
+    return xp_by_sub, total
+
+
+def get_class_leaderboard(grade, subject_filter='overall', current_student_id=None, con=None):
+    close_con = False
+    if con is None:
+        con = db()
+        close_con = True
+
+    students = con.execute('''
+        SELECT id, name, roll_no, grade
+        FROM users
+        WHERE role = 'student' AND grade = ?
+        ORDER BY id
+    ''', (grade,)).fetchall()
+
+    for s in students:
+        ensure_student_xp(s['id'], con)
+
+    leaderboard = []
+    for s in students:
+        if subject_filter != 'overall' and subject_filter in SUBJECTS:
+            row = con.execute('''
+                SELECT xp FROM student_xp WHERE student_id = ? AND subject = ?
+            ''', (s['id'], subject_filter)).fetchone()
+            s_xp = row['xp'] if row else BASE_XP_PER_SUBJECT
+        else:
+            row = con.execute('''
+                SELECT SUM(xp) AS total FROM student_xp WHERE student_id = ?
+            ''', (s['id'],)).fetchone()
+            s_xp = row['total'] if (row and row['total'] is not None) else (BASE_XP_PER_SUBJECT * len(SUBJECTS))
+
+        leaderboard.append({
+            'id': s['id'],
+            'name': s['name'],
+            'roll_no': s['roll_no'],
+            'grade': s['grade'],
+            'xp': s_xp,
+            'is_current': bool(current_student_id and s['id'] == current_student_id)
+        })
+
+    leaderboard.sort(key=lambda x: (-x['xp'], x['id']))
+
+    current_entry = None
+    current_index = -1
+    for idx, entry in enumerate(leaderboard):
+        entry['rank'] = idx + 1
+        if current_student_id and entry['id'] == current_student_id:
+            current_entry = entry
+            current_index = idx
+
+    student_ahead = None
+    student_behind = None
+
+    if current_index > 0:
+        ahead = leaderboard[current_index - 1]
+        student_ahead = {
+            'rank': ahead['rank'],
+            'name': ahead['name'],
+            'roll_no': ahead['roll_no'],
+            'xp': ahead['xp'],
+            'xp_diff': ahead['xp'] - current_entry['xp']
+        }
+
+    if current_index >= 0 and current_index < len(leaderboard) - 1:
+        behind = leaderboard[current_index + 1]
+        student_behind = {
+            'rank': behind['rank'],
+            'name': behind['name'],
+            'roll_no': behind['roll_no'],
+            'xp': behind['xp'],
+            'xp_diff': current_entry['xp'] - behind['xp']
+        }
+
+    if close_con:
+        con.close()
+
+    return leaderboard, current_entry, student_ahead, student_behind
 
 
 # --------------------------------------------------
@@ -486,6 +634,8 @@ def register():
             # Automatically assign the teachers selected by the school.
             if role == 'student':
 
+                ensure_student_xp(uid, con)
+
                 assign_class_teachers(
                     uid,
                     f.get('grade', '').strip(),
@@ -604,6 +754,19 @@ def dashboard():
 
     if user['role'] == 'student':
 
+        lb_subject = request.args.get('lb_subject', 'overall')
+        if lb_subject != 'overall' and lb_subject not in SUBJECTS:
+            lb_subject = 'overall'
+
+        subject_xp, total_xp = get_student_xp_summary(user['id'], con)
+        leaderboard, my_lb_entry, student_ahead, student_behind = get_class_leaderboard(
+            user['grade'],
+            subject_filter=lb_subject,
+            current_student_id=user['id'],
+            con=con
+        )
+        my_rank = my_lb_entry['rank'] if my_lb_entry else 1
+
         rows = con.execute('''
             SELECT * FROM progress
             WHERE student_id=?
@@ -650,7 +813,14 @@ def dashboard():
             rows=rows,
             allocations=allocations,
             attempts=attempts,
-            open_tickets=open_tickets
+            open_tickets=open_tickets,
+            subject_xp=subject_xp,
+            total_xp=total_xp,
+            leaderboard=leaderboard,
+            my_rank=my_rank,
+            student_ahead=student_ahead,
+            student_behind=student_behind,
+            lb_subject=lb_subject
         )
 
     # TEACHER DASHBOARD
@@ -1266,6 +1436,24 @@ def quiz():
                 now
             ))
 
+        xp_earned = 0
+        new_subject_xp = 0
+        new_total_xp = 0
+
+        if correct:
+            xp_earned, new_subject_xp, new_total_xp = award_quiz_xp(user['id'], subject, con)
+        else:
+            subj_xp_dict, new_total_xp = get_student_xp_summary(user['id'], con)
+            new_subject_xp = subj_xp_dict.get(subject, BASE_XP_PER_SUBJECT)
+
+        _, my_lb_entry, student_ahead, student_behind = get_class_leaderboard(
+            user['grade'],
+            subject_filter=subject,
+            current_student_id=user['id'],
+            con=con
+        )
+        my_rank = my_lb_entry['rank'] if my_lb_entry else 1
+
         con.commit()
         con.close()
 
@@ -1276,7 +1464,13 @@ def quiz():
             selected=selected,
             correct=bool(correct),
             subject=subject,
-            topic=topic
+            topic=topic,
+            xp_earned=xp_earned,
+            new_subject_xp=new_subject_xp,
+            new_total_xp=new_total_xp,
+            my_rank=my_rank,
+            student_ahead=student_ahead,
+            student_behind=student_behind
         )
 
     return render_template(
@@ -1563,13 +1757,17 @@ def report(student_id):
         date.today().strftime('%Y-%m')
     )).fetchone()
 
+    subject_xp, total_xp = get_student_xp_summary(student_id, con)
+
     con.close()
 
     return render_template(
         'report.html',
         student=student,
         progress=progress,
-        attempts=attempts
+        attempts=attempts,
+        subject_xp=subject_xp,
+        total_xp=total_xp
     )
 
 
