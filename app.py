@@ -1,13 +1,14 @@
+
 import os
+import re
 import sqlite3
 import secrets
 from datetime import datetime, date, timedelta
 from functools import wraps
 
 from flask import (
-    Flask, render_template, render_template_string,
-    request, redirect, url_for, session, flash,
-    jsonify, abort
+    Flask, render_template, request, redirect, url_for,
+    session, flash, jsonify, abort
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -23,11 +24,14 @@ app = Flask(__name__)
 
 app.secret_key = os.environ.get(
     'VIDHYASTRA_SECRET',
-    'change-this-secret-key-before-deployment'
+    'dev-only-change-this-secret-before-deployment'
 )
 
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = (
+    os.environ.get('VIDHYASTRA_HTTPS', '0') == '1'
+)
 
 SUBJECTS = [
     'Mathematics',
@@ -36,6 +40,13 @@ SUBJECTS = [
     'Social Studies',
     'Hindi',
     'Telugu'
+]
+
+TICKET_STATUSES = [
+    'Open',
+    'In review',
+    'Scheduled',
+    'Closed'
 ]
 
 
@@ -65,6 +76,7 @@ TOPIC_BANK = {
                 'why': '20 ÷ 4 = 5, and 5 × 3 = 15.'
             }
         ],
+
         'Percentages': [
             {
                 'q': 'What is 25% of 200?',
@@ -79,6 +91,7 @@ TOPIC_BANK = {
                 'why': '10% of ₹100 is ₹10, so the new price is ₹110.'
             }
         ],
+
         'Linear Equations': [
             {
                 'q': 'Solve: x + 5 = 12',
@@ -110,6 +123,7 @@ TOPIC_BANK = {
                 'why': 'The cell wall provides support and protection to plant cells.'
             }
         ],
+
         'Force and Motion': [
             {
                 'q': 'What is the SI unit of force?',
@@ -139,181 +153,505 @@ TOPIC_BANK = {
 
 
 # --------------------------------------------------
-# DATABASE CONNECTION
+# DATABASE HELPERS AND SAFE MIGRATIONS
 # --------------------------------------------------
 
 def db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute('PRAGMA foreign_keys = ON')
-    return conn
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    con.execute('PRAGMA foreign_keys = ON')
+    return con
 
 
-# --------------------------------------------------
-# DATABASE INITIALIZATION
-# --------------------------------------------------
+def table_columns(con, table_name):
+    return {
+        row['name']
+        for row in con.execute(
+            f'PRAGMA table_info({table_name})'
+        ).fetchall()
+    }
 
-def init_db():
 
-    con = db()
+def add_column_if_missing(
+    con,
+    table_name,
+    column_name,
+    column_definition
+):
+    if column_name not in table_columns(con, table_name):
+        con.execute(
+            f'ALTER TABLE {table_name} '
+            f'ADD COLUMN {column_name} {column_definition}'
+        )
 
-    con.executescript('''
 
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        phone TEXT NOT NULL,
-        password_hash TEXT NOT NULL,
-        role TEXT NOT NULL,
-        region TEXT DEFAULT '',
-        district TEXT DEFAULT '',
-        state TEXT DEFAULT '',
-        board TEXT DEFAULT '',
-        grade TEXT DEFAULT '',
-        language TEXT DEFAULT 'English',
-        theme TEXT DEFAULT 'light',
-        bot_name TEXT DEFAULT 'Astra',
-        roll_no TEXT UNIQUE,
-        created_at TEXT NOT NULL
-    );
+def has_unique_index(con, table_name, expected_columns):
+    expected = tuple(expected_columns)
 
-    CREATE TABLE IF NOT EXISTS allocations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        student_id INTEGER NOT NULL,
-        teacher_id INTEGER NOT NULL,
-        subject TEXT NOT NULL,
-        UNIQUE(student_id, subject),
-        FOREIGN KEY(student_id) REFERENCES users(id),
-        FOREIGN KEY(teacher_id) REFERENCES users(id)
-    );
+    for index in con.execute(
+        f'PRAGMA index_list({table_name})'
+    ).fetchall():
 
-    CREATE TABLE IF NOT EXISTS class_teacher_assignments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        grade TEXT NOT NULL,
-        board TEXT NOT NULL,
-        subject TEXT NOT NULL,
-        teacher_id INTEGER NOT NULL,
-        UNIQUE(grade, board, subject),
-        FOREIGN KEY(teacher_id) REFERENCES users(id)
-    );
+        if index['unique']:
+            names = tuple(
+                row['name']
+                for row in con.execute(
+                    f"PRAGMA index_info('{index['name']}')"
+                ).fetchall()
+            )
 
-    CREATE TABLE IF NOT EXISTS progress (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        student_id INTEGER NOT NULL,
-        subject TEXT NOT NULL,
-        topic TEXT NOT NULL,
-        attempts INTEGER DEFAULT 0,
-        correct INTEGER DEFAULT 0,
-        level INTEGER DEFAULT 1,
-        last_seen TEXT NOT NULL,
-        UNIQUE(student_id, subject, topic),
-        FOREIGN KEY(student_id) REFERENCES users(id)
-    );
+            if names == expected:
+                return True
 
-    CREATE TABLE IF NOT EXISTS quiz_attempts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        student_id INTEGER NOT NULL,
-        subject TEXT NOT NULL,
-        topic TEXT NOT NULL,
-        question TEXT NOT NULL,
-        selected TEXT NOT NULL,
-        answer TEXT NOT NULL,
-        is_correct INTEGER NOT NULL,
-        created_at TEXT NOT NULL,
-        FOREIGN KEY(student_id) REFERENCES users(id)
-    );
+    return False
 
-    CREATE TABLE IF NOT EXISTS tickets (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        student_id INTEGER,
-        parent_id INTEGER,
-        teacher_id INTEGER,
-        kind TEXT NOT NULL,
-        message TEXT NOT NULL,
-        status TEXT DEFAULT 'Open',
-        created_at TEXT NOT NULL,
-        FOREIGN KEY(student_id) REFERENCES users(id),
-        FOREIGN KEY(parent_id) REFERENCES users(id),
-        FOREIGN KEY(teacher_id) REFERENCES users(id)
-    );
 
-    CREATE TABLE IF NOT EXISTS parent_links (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        parent_id INTEGER NOT NULL,
-        student_id INTEGER NOT NULL,
-        UNIQUE(parent_id, student_id),
-        FOREIGN KEY(parent_id) REFERENCES users(id),
-        FOREIGN KEY(student_id) REFERENCES users(id)
-    );
+def migrate_database(con):
+    """
+    Upgrade an older single-school database without deleting user data.
+    """
 
-    ''')
+    con.execute('PRAGMA foreign_keys = OFF')
+    con.execute('BEGIN')
 
-    con.commit()
+    try:
 
-    # Create the first administrator from environment variables.
-    # Never create an administrator through public registration.
+        con.execute('''
+            CREATE TABLE IF NOT EXISTS schools (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                school_name TEXT NOT NULL,
+                school_code TEXT NOT NULL UNIQUE,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            )
+        ''')
 
-    admin_email = os.environ.get('VIDHYASTRA_ADMIN_EMAIL', 'admin@school.com').strip().lower()
-    admin_password = os.environ.get('VIDHYASTRA_ADMIN_PASSWORD', 'adminpassword123')
-    admin_name = os.environ.get('VIDHYASTRA_ADMIN_NAME', 'School Administrator')
+        add_column_if_missing(
+            con, 'users', 'school_id',
+            'INTEGER REFERENCES schools(id)'
+        )
 
-    if admin_email and admin_password:
+        add_column_if_missing(
+            con, 'allocations', 'school_id',
+            'INTEGER REFERENCES schools(id)'
+        )
 
-        existing = con.execute(
-            'SELECT id FROM users WHERE email=?',
-            (admin_email,)
+        add_column_if_missing(
+            con, 'class_teacher_assignments', 'school_id',
+            'INTEGER REFERENCES schools(id)'
+        )
+
+        add_column_if_missing(
+            con, 'tickets', 'school_id',
+            'INTEGER REFERENCES schools(id)'
+        )
+
+        add_column_if_missing(
+            con, 'tickets', 'subject',
+            "TEXT NOT NULL DEFAULT ''"
+        )
+
+        # Put existing single-school accounts into a demo school.
+
+        existing_users = con.execute(
+            'SELECT COUNT(*) AS n FROM users'
+        ).fetchone()['n']
+
+        legacy_admin_configured = bool(
+            os.environ.get('VIDHYASTRA_ADMIN_EMAIL')
+            and os.environ.get('VIDHYASTRA_ADMIN_PASSWORD')
+        )
+
+        existing_school = con.execute(
+            'SELECT id FROM schools ORDER BY id LIMIT 1'
         ).fetchone()
 
-        if not existing:
+        if not existing_school and (
+            existing_users > 0 or legacy_admin_configured
+        ):
+
+            con.execute('''
+                INSERT INTO schools
+                (school_name, school_code, is_active, created_at)
+                VALUES (?, ?, 1, ?)
+            ''', (
+                'Vidhyastra Demo School',
+                'VDS-DEMO',
+                datetime.now().isoformat(timespec='seconds')
+            ))
+
+        demo_school = con.execute('''
+            SELECT id FROM schools
+            WHERE school_code=?
+        ''', ('VDS-DEMO',)).fetchone()
+
+        default_school_id = (
+            demo_school['id'] if demo_school else None
+        )
+
+        if default_school_id is not None:
+
+            con.execute('''
+                UPDATE users
+                SET school_id=?
+                WHERE school_id IS NULL
+                AND role <> 'platform_admin'
+            ''', (default_school_id,))
+
+            con.execute('''
+                UPDATE allocations
+                SET school_id=(
+                    SELECT school_id
+                    FROM users
+                    WHERE users.id=allocations.student_id
+                )
+                WHERE school_id IS NULL
+            ''')
+
+            con.execute('''
+                UPDATE class_teacher_assignments
+                SET school_id=?
+                WHERE school_id IS NULL
+            ''', (default_school_id,))
+
+            con.execute('''
+                UPDATE tickets
+                SET school_id=COALESCE(
+                    (
+                        SELECT school_id
+                        FROM users
+                        WHERE users.id=tickets.student_id
+                    ),
+                    (
+                        SELECT school_id
+                        FROM users
+                        WHERE users.id=tickets.parent_id
+                    ),
+                    ?
+                )
+                WHERE school_id IS NULL
+            ''', (default_school_id,))
+
+        # Change the old class assignment uniqueness rule.
+        # Each school must be able to assign its own teacher
+        # to the same class, board and subject.
+
+        if not has_unique_index(
+            con,
+            'class_teacher_assignments',
+            ['school_id', 'grade', 'board', 'subject']
+        ):
+
+            con.execute('''
+                CREATE TABLE class_teacher_assignments_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    school_id INTEGER NOT NULL,
+                    grade TEXT NOT NULL,
+                    board TEXT NOT NULL,
+                    subject TEXT NOT NULL,
+                    teacher_id INTEGER NOT NULL,
+
+                    UNIQUE(school_id, grade, board, subject),
+
+                    FOREIGN KEY(school_id) REFERENCES schools(id),
+                    FOREIGN KEY(teacher_id) REFERENCES users(id)
+                )
+            ''')
+
+            con.execute('''
+                INSERT INTO class_teacher_assignments_new
+                    (id, school_id, grade, board, subject, teacher_id)
+                SELECT
+                    id, school_id, grade, board, subject, teacher_id
+                FROM class_teacher_assignments
+                WHERE school_id IS NOT NULL
+            ''')
+
+            con.execute(
+                'DROP TABLE class_teacher_assignments'
+            )
+
+            con.execute('''
+                ALTER TABLE class_teacher_assignments_new
+                RENAME TO class_teacher_assignments
+            ''')
+
+        # Indexes improve school-specific lookups.
+
+        con.execute('''
+            CREATE INDEX IF NOT EXISTS idx_users_school_role
+            ON users(school_id, role)
+        ''')
+
+        con.execute('''
+            CREATE INDEX IF NOT EXISTS idx_allocations_school_teacher
+            ON allocations(school_id, teacher_id)
+        ''')
+
+        con.execute('''
+            CREATE INDEX IF NOT EXISTS idx_allocations_student
+            ON allocations(student_id)
+        ''')
+
+        con.execute('''
+            CREATE INDEX IF NOT EXISTS idx_tickets_school_teacher
+            ON tickets(school_id, teacher_id)
+        ''')
+
+        con.execute('''
+            CREATE INDEX IF NOT EXISTS idx_tickets_student
+            ON tickets(student_id, created_at)
+        ''')
+
+        con.execute('''
+            CREATE INDEX IF NOT EXISTS idx_assignments_school
+            ON class_teacher_assignments(school_id, grade, board)
+        ''')
+
+        con.commit()
+
+    except Exception:
+        con.rollback()
+        raise
+
+    finally:
+        con.execute('PRAGMA foreign_keys = ON')
+
+
+def seed_configured_administrators(con):
+    """
+    Create administrators only from explicit environment variables.
+    Public registration never creates admin accounts.
+    """
+
+    platform_email = os.environ.get(
+        'VIDHYASTRA_PLATFORM_ADMIN_EMAIL', ''
+    ).strip().lower()
+
+    platform_password = os.environ.get(
+        'VIDHYASTRA_PLATFORM_ADMIN_PASSWORD', ''
+    )
+
+    platform_name = os.environ.get(
+        'VIDHYASTRA_PLATFORM_ADMIN_NAME',
+        'Vidhyastra Platform Admin'
+    )
+
+    if platform_email and platform_password:
+
+        found = con.execute(
+            'SELECT id FROM users WHERE email=?',
+            (platform_email,)
+        ).fetchone()
+
+        if not found:
 
             con.execute('''
                 INSERT INTO users
                 (name, email, phone, password_hash, role, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, 'platform_admin', ?)
             ''', (
-                admin_name,
-                admin_email,
+                platform_name,
+                platform_email,
                 'Not provided',
-                generate_password_hash(admin_password),
-                'admin',
+                generate_password_hash(platform_password),
                 datetime.now().isoformat(timespec='seconds')
             ))
 
-            con.commit()
+    # Optional compatibility for an older demo administrator.
 
-    con.close()
+    admin_email = os.environ.get(
+        'VIDHYASTRA_ADMIN_EMAIL', ''
+    ).strip().lower()
+
+    admin_password = os.environ.get(
+        'VIDHYASTRA_ADMIN_PASSWORD', ''
+    )
+
+    admin_name = os.environ.get(
+        'VIDHYASTRA_ADMIN_NAME',
+        'School Administrator'
+    )
+
+    if admin_email and admin_password:
+
+        school = con.execute('''
+            SELECT id FROM schools
+            WHERE school_code=?
+        ''', ('VDS-DEMO',)).fetchone()
+
+        if school:
+
+            found = con.execute(
+                'SELECT id FROM users WHERE email=?',
+                (admin_email,)
+            ).fetchone()
+
+            if not found:
+
+                con.execute('''
+                    INSERT INTO users
+                    (
+                        name, email, phone, password_hash,
+                        role, school_id, created_at
+                    )
+                    VALUES (?, ?, ?, ?, 'admin', ?, ?)
+                ''', (
+                    admin_name,
+                    admin_email,
+                    'Not provided',
+                    generate_password_hash(admin_password),
+                    school['id'],
+                    datetime.now().isoformat(timespec='seconds')
+                ))
+
+
+def init_db():
+    con = db()
+
+    try:
+
+        con.executescript('''
+
+            CREATE TABLE IF NOT EXISTS schools (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                school_name TEXT NOT NULL,
+                school_code TEXT NOT NULL UNIQUE,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                phone TEXT NOT NULL,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL,
+                region TEXT DEFAULT '',
+                district TEXT DEFAULT '',
+                state TEXT DEFAULT '',
+                board TEXT DEFAULT '',
+                grade TEXT DEFAULT '',
+                language TEXT DEFAULT 'English',
+                theme TEXT DEFAULT 'light',
+                bot_name TEXT DEFAULT 'Astra',
+                roll_no TEXT UNIQUE,
+                school_id INTEGER REFERENCES schools(id),
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS allocations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id INTEGER NOT NULL,
+                teacher_id INTEGER NOT NULL,
+                subject TEXT NOT NULL,
+                school_id INTEGER REFERENCES schools(id),
+                UNIQUE(student_id, subject),
+                FOREIGN KEY(student_id) REFERENCES users(id),
+                FOREIGN KEY(teacher_id) REFERENCES users(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS class_teacher_assignments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                school_id INTEGER NOT NULL,
+                grade TEXT NOT NULL,
+                board TEXT NOT NULL,
+                subject TEXT NOT NULL,
+                teacher_id INTEGER NOT NULL,
+
+                UNIQUE(school_id, grade, board, subject),
+
+                FOREIGN KEY(school_id) REFERENCES schools(id),
+                FOREIGN KEY(teacher_id) REFERENCES users(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS progress (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id INTEGER NOT NULL,
+                subject TEXT NOT NULL,
+                topic TEXT NOT NULL,
+                attempts INTEGER DEFAULT 0,
+                correct INTEGER DEFAULT 0,
+                level INTEGER DEFAULT 1,
+                last_seen TEXT NOT NULL,
+                UNIQUE(student_id, subject, topic),
+                FOREIGN KEY(student_id) REFERENCES users(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS quiz_attempts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id INTEGER NOT NULL,
+                subject TEXT NOT NULL,
+                topic TEXT NOT NULL,
+                question TEXT NOT NULL,
+                selected TEXT NOT NULL,
+                answer TEXT NOT NULL,
+                is_correct INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(student_id) REFERENCES users(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS tickets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id INTEGER,
+                parent_id INTEGER,
+                teacher_id INTEGER,
+                kind TEXT NOT NULL,
+                message TEXT NOT NULL,
+                status TEXT DEFAULT 'Open',
+                created_at TEXT NOT NULL,
+                school_id INTEGER REFERENCES schools(id),
+                subject TEXT NOT NULL DEFAULT '',
+
+                FOREIGN KEY(student_id) REFERENCES users(id),
+                FOREIGN KEY(parent_id) REFERENCES users(id),
+                FOREIGN KEY(teacher_id) REFERENCES users(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS parent_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                parent_id INTEGER NOT NULL,
+                student_id INTEGER NOT NULL,
+                UNIQUE(parent_id, student_id),
+                FOREIGN KEY(parent_id) REFERENCES users(id),
+                FOREIGN KEY(student_id) REFERENCES users(id)
+            );
+
+        ''')
+
+        con.commit()
+
+        migrate_database(con)
+        seed_configured_administrators(con)
+
+        con.commit()
+
+    finally:
+        con.close()
 
 
 # --------------------------------------------------
-# AUTOMATIC STUDENT TEACHER ALLOCATION
+# AUTHENTICATION AND SCHOOL HELPERS
 # --------------------------------------------------
 
-def assign_class_teachers(student_id, grade, board, con):
+def current_user():
+    user_id = session.get('user_id')
 
-    assignments = con.execute('''
-        SELECT teacher_id, subject
-        FROM class_teacher_assignments
-        WHERE grade=? AND board=?
-    ''', (grade, board)).fetchall()
+    if not user_id:
+        return None
 
-    for assignment in assignments:
+    con = db()
 
-        con.execute('''
-            INSERT INTO allocations(student_id, teacher_id, subject)
-            VALUES (?, ?, ?)
-            ON CONFLICT(student_id, subject)
-            DO UPDATE SET teacher_id=excluded.teacher_id
-        ''', (
-            student_id,
-            assignment['teacher_id'],
-            assignment['subject']
-        ))
+    try:
+        return con.execute(
+            'SELECT * FROM users WHERE id=?',
+            (user_id,)
+        ).fetchone()
 
+    finally:
+        con.close()
 
-# --------------------------------------------------
-# AUTHENTICATION AND ROLE CHECKING
-# --------------------------------------------------
 
 def login_required(fn):
 
@@ -323,26 +661,13 @@ def login_required(fn):
         if 'user_id' not in session:
             return redirect(url_for('login'))
 
+        if not current_user():
+            session.clear()
+            return redirect(url_for('login'))
+
         return fn(*args, **kwargs)
 
     return wrapper
-
-
-def current_user():
-
-    if 'user_id' not in session:
-        return None
-
-    con = db()
-
-    user = con.execute(
-        'SELECT * FROM users WHERE id=?',
-        (session['user_id'],)
-    ).fetchone()
-
-    con.close()
-
-    return user
 
 
 def role_required(*roles):
@@ -367,13 +692,57 @@ def role_required(*roles):
     return deco
 
 
-# --------------------------------------------------
-# GLOBAL TEMPLATE VARIABLES
-# --------------------------------------------------
+def school_code_is_valid(code):
+    return bool(
+        re.fullmatch(r'[A-Z0-9-]{4,20}', code or '')
+    )
+
+
+def assign_class_teachers(
+    student_id,
+    school_id,
+    grade,
+    board,
+    con
+):
+
+    assignments = con.execute('''
+        SELECT teacher_id, subject
+        FROM class_teacher_assignments
+        WHERE school_id=? AND grade=? AND board=?
+    ''', (school_id, grade, board)).fetchall()
+
+    for assignment in assignments:
+
+        teacher = con.execute('''
+            SELECT id FROM users
+            WHERE id=? AND role='teacher' AND school_id=?
+        ''', (
+            assignment['teacher_id'],
+            school_id
+        )).fetchone()
+
+        if not teacher:
+            continue
+
+        con.execute('''
+            INSERT INTO allocations
+            (student_id, teacher_id, subject, school_id)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(student_id, subject)
+            DO UPDATE SET
+                teacher_id=excluded.teacher_id,
+                school_id=excluded.school_id
+        ''', (
+            student_id,
+            assignment['teacher_id'],
+            assignment['subject'],
+            school_id
+        ))
+
 
 @app.context_processor
 def inject_globals():
-
     return {
         'current_user': current_user(),
         'subjects': SUBJECTS,
@@ -382,165 +751,202 @@ def inject_globals():
 
 
 # --------------------------------------------------
-# HOME PAGE
+# HOME AND REGISTRATION
 # --------------------------------------------------
 
 @app.route('/')
 def index():
 
-    if 'user_id' in session:
+    if session.get('user_id'):
         return redirect(url_for('dashboard'))
 
     return render_template('index.html')
 
 
-# --------------------------------------------------
-# STUDENT AND PARENT REGISTRATION
-# --------------------------------------------------
-
 @app.route('/register', methods=['GET', 'POST'])
 def register():
 
-    if request.method == 'POST':
+    if request.method == 'GET':
+        return render_template('register.html')
 
-        f = request.form
+    form = request.form
 
-        name = f.get('name', '').strip()
-        email = f.get('email', '').strip().lower()
-        phone = f.get('phone', '').strip()
-        password = f.get('password', '')
-        role = f.get('role', '').strip()
+    name = form.get('name', '').strip()
+    email = form.get('email', '').strip().lower()
+    phone = form.get('phone', '').strip()
+    password = form.get('password', '')
+    role = form.get('role', '').strip()
+    school_code = form.get('school_code', '').strip().upper()
 
-        if not all([name, email, phone, password, role]):
+    if not all([
+        name, email, phone, password, role, school_code
+    ]):
+        flash(
+            'Please complete all required fields, including your school code.',
+            'error'
+        )
+        return redirect(url_for('register'))
 
-            flash('Please complete all required fields.', 'error')
+    if role not in ('student', 'parent'):
+        flash(
+            'Only student and parent accounts can register here.',
+            'error'
+        )
+        return redirect(url_for('register'))
+
+    if len(password) < 8:
+        flash(
+            'Use a password with at least 8 characters.',
+            'error'
+        )
+        return redirect(url_for('register'))
+
+    if not school_code_is_valid(school_code):
+        flash(
+            'Enter a valid school code supplied by your school.',
+            'error'
+        )
+        return redirect(url_for('register'))
+
+    if role == 'student':
+
+        required_fields = [
+            'region', 'district', 'state', 'board', 'grade'
+        ]
+
+        if not all(
+            form.get(key, '').strip()
+            for key in required_fields
+        ):
+            flash(
+                'Please complete region, district, state, board and class.',
+                'error'
+            )
             return redirect(url_for('register'))
 
-        # Public registration is only for students and parents.
-        # Teachers and administrators must be created by the school.
+    con = db()
 
-        if role not in ['student', 'parent']:
+    try:
 
-            flash('Invalid account type. Teachers and administrators are created by the school.', 'error')
+        school = con.execute('''
+            SELECT id, school_name
+            FROM schools
+            WHERE school_code=? AND is_active=1
+        ''', (school_code,)).fetchone()
+
+        if not school:
+            flash(
+                'That school code is not valid or the school is inactive. '
+                'Contact your school administrator.',
+                'error'
+            )
             return redirect(url_for('register'))
 
-        if len(password) < 8:
+        roll = (
+            'VDS-' + secrets.token_hex(3).upper()
+            if role == 'student'
+            else None
+        )
 
-            flash('Use a password with at least 8 characters.', 'error')
-            return redirect(url_for('register'))
+        cur = con.execute('''
+            INSERT INTO users (
+                name, email, phone, password_hash, role,
+                region, district, state, board, grade,
+                language, roll_no, school_id, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            name,
+            email,
+            phone,
+            generate_password_hash(password),
+            role,
+            form.get('region', '').strip(),
+            form.get('district', '').strip(),
+            form.get('state', '').strip(),
+            form.get('board', '').strip(),
+            form.get('grade', '').strip(),
+            form.get('language', 'English'),
+            roll,
+            school['id'],
+            datetime.now().isoformat(timespec='seconds')
+        ))
+
+        user_id = cur.lastrowid
 
         if role == 'student':
 
-            required_fields = [
-                'region',
-                'district',
-                'state',
-                'board',
-                'grade'
-            ]
-
-            if not all(f.get(k, '').strip() for k in required_fields):
-
-                flash(
-                    'Please select region, district, state, board and class.',
-                    'error'
-                )
-
-                return redirect(url_for('register'))
-
-        con = db()
-
-        try:
-
-            roll = None
-
-            if role == 'student':
-                roll = 'VDS-' + secrets.token_hex(3).upper()
-
-            cur = con.execute('''
-                INSERT INTO users
-                (
-                    name, email, phone, password_hash, role,
-                    region, district, state, board, grade,
-                    language, roll_no, created_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                name,
-                email,
-                phone,
-                generate_password_hash(password),
-                role,
-                f.get('region', '').strip(),
-                f.get('district', '').strip(),
-                f.get('state', '').strip(),
-                f.get('board', '').strip(),
-                f.get('grade', '').strip(),
-                f.get('language', 'English'),
-                roll,
-                datetime.now().isoformat(timespec='seconds')
-            ))
-
-            uid = cur.lastrowid
-
-            # Automatically assign the teachers selected by the school.
-            if role == 'student':
-
-                assign_class_teachers(
-                    uid,
-                    f.get('grade', '').strip(),
-                    f.get('board', '').strip(),
-                    con
-                )
-
-            if role == 'parent':
-
-                child_roll = f.get('child_roll', '').strip().upper()
-
-                if child_roll:
-
-                    child = con.execute('''
-                        SELECT id FROM users
-                        WHERE roll_no=? AND role='student'
-                    ''', (child_roll,)).fetchone()
-
-                    if child:
-
-                        con.execute('''
-                            INSERT OR IGNORE INTO parent_links
-                            (parent_id, student_id)
-                            VALUES (?, ?)
-                        ''', (uid, child['id']))
-
-            con.commit()
-
-            session.clear()
-            session['user_id'] = uid
-
-            flash('Welcome to Vidhyastra! Your account is ready.', 'success')
-
-            return redirect(url_for('dashboard'))
-
-        except sqlite3.IntegrityError:
-
-            con.rollback()
-
-            flash(
-                'That email is already registered. Please sign in instead.',
-                'error'
+            assign_class_teachers(
+                user_id,
+                school['id'],
+                form.get('grade', '').strip(),
+                form.get('board', '').strip(),
+                con
             )
 
-        finally:
+        elif role == 'parent':
 
-            con.close()
+            child_roll = form.get(
+                'child_roll', ''
+            ).strip().upper()
+
+            if child_roll:
+
+                child = con.execute('''
+                    SELECT id FROM users
+                    WHERE roll_no=?
+                    AND role='student'
+                    AND school_id=?
+                ''', (
+                    child_roll,
+                    school['id']
+                )).fetchone()
+
+                if child:
+
+                    con.execute('''
+                        INSERT OR IGNORE INTO parent_links
+                        (parent_id, student_id)
+                        VALUES (?, ?)
+                    ''', (user_id, child['id']))
+
+                else:
+                    flash(
+                        'Parent account created, but the student roll number '
+                        'was not found in this school. The school can help '
+                        'link the accounts.',
+                        'warning'
+                    )
+
+        con.commit()
+
+        session.clear()
+        session['user_id'] = user_id
+
+        flash(
+            f'Welcome to Vidhyastra at {school["school_name"]}!',
+            'success'
+        )
+
+        return redirect(url_for('dashboard'))
+
+    except sqlite3.IntegrityError:
+
+        con.rollback()
+
+        flash(
+            'This email or roll number is already registered.',
+            'error'
+        )
 
         return redirect(url_for('register'))
 
-    return render_template('register.html')
+    finally:
+        con.close()
 
 
 # --------------------------------------------------
-# LOGIN
+# LOGIN AND LOGOUT
 # --------------------------------------------------
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -550,17 +956,43 @@ def login():
 
         con = db()
 
-        user = con.execute(
-            'SELECT * FROM users WHERE email=?',
-            (request.form.get('email', '').strip().lower(),)
-        ).fetchone()
+        try:
+            user = con.execute(
+                'SELECT * FROM users WHERE email=?',
+                (request.form.get('email', '').strip().lower(),)
+            ).fetchone()
 
-        con.close()
+        finally:
+            con.close()
 
         if user and check_password_hash(
             user['password_hash'],
             request.form.get('password', '')
         ):
+
+            if user['role'] != 'platform_admin':
+
+                con = db()
+
+                try:
+                    active_school = con.execute(
+                        'SELECT is_active FROM schools WHERE id=?',
+                        (user['school_id'],)
+                    ).fetchone()
+
+                finally:
+                    con.close()
+
+                if (
+                    not active_school
+                    or not active_school['is_active']
+                ):
+                    flash(
+                        'Your school account is currently inactive. '
+                        'Contact Vidhyastra support.',
+                        'error'
+                    )
+                    return redirect(url_for('login'))
 
             session.clear()
             session['user_id'] = user['id']
@@ -569,14 +1001,13 @@ def login():
 
             return redirect(url_for('dashboard'))
 
-        flash('Email or password is incorrect.', 'error')
+        flash(
+            'Email or password is incorrect.',
+            'error'
+        )
 
     return render_template('login.html')
 
-
-# --------------------------------------------------
-# LOGOUT
-# --------------------------------------------------
 
 @app.route('/logout')
 def logout():
@@ -589,7 +1020,7 @@ def logout():
 
 
 # --------------------------------------------------
-# DASHBOARD
+# DASHBOARDS
 # --------------------------------------------------
 
 @app.route('/dashboard')
@@ -598,536 +1029,629 @@ def dashboard():
 
     user = current_user()
 
-    con = db()
+    if not user:
+        abort(403)
 
-    # STUDENT DASHBOARD
-
-    if user['role'] == 'student':
-
-        rows = con.execute('''
-            SELECT * FROM progress
-            WHERE student_id=?
-            ORDER BY subject, topic
-        ''', (user['id'],)).fetchall()
-
-        allocations = con.execute('''
-            SELECT
-                a.subject,
-                u.id AS teacher_id,
-                u.name AS teacher_name
-            FROM allocations a
-            JOIN users u ON u.id=a.teacher_id
-            WHERE a.student_id=?
-            ORDER BY a.subject
-        ''', (user['id'],)).fetchall()
-
-        attempts = con.execute('''
-            SELECT
-                COUNT(*) AS n,
-                COALESCE(SUM(is_correct), 0) AS correct
-            FROM quiz_attempts
-            WHERE student_id=?
-        ''', (user['id'],)).fetchone()
-
-        week_start = (
-            date.today() -
-            timedelta(days=date.today().weekday())
-        ).isoformat()
-
-        open_tickets = con.execute('''
-            SELECT COUNT(*) AS n
-            FROM tickets
-            WHERE student_id=?
-            AND kind='Student session'
-            AND substr(created_at, 1, 10) >= ?
-        ''', (user['id'], week_start)).fetchone()['n']
-
-        con.close()
-
-        return render_template(
-            'student_dashboard.html',
-            user=user,
-            rows=rows,
-            allocations=allocations,
-            attempts=attempts,
-            open_tickets=open_tickets
-        )
-
-    # TEACHER DASHBOARD
-
-    if user['role'] == 'teacher':
-
-        students = con.execute('''
-            SELECT
-                u.*,
-                a.subject,
-                COALESCE(SUM(p.attempts), 0) AS attempts,
-                COALESCE(SUM(p.correct), 0) AS correct,
-                CASE
-                    WHEN COALESCE(SUM(p.attempts), 0)=0 THEN 0
-                    ELSE ROUND(
-                        100.0 * SUM(p.correct) / SUM(p.attempts)
-                    )
-                END AS accuracy
-            FROM allocations a
-            JOIN users u ON u.id=a.student_id
-            LEFT JOIN progress p
-                ON p.student_id=u.id AND p.subject=a.subject
-            WHERE a.teacher_id=?
-            GROUP BY u.id, a.subject
-            ORDER BY u.name
-        ''', (user['id'],)).fetchall()
-
-        tickets = con.execute("""
-    SELECT t.*, u.name AS student_name
-    FROM tickets t
-    LEFT JOIN users u ON u.id = t.student_id
-    WHERE t.teacher_id = ?
-    ORDER BY t.created_at DESC
-    LIMIT 30
-""", (user['id'],)).fetchall()
-
-        con.close()
-
-        return render_template(
-            'teacher_dashboard.html',
-            user=user,
-            students=students,
-            tickets=tickets
-        )
-
-    # PARENT DASHBOARD
-
-    if user['role'] == 'parent':
-
-        children = con.execute('''
-            SELECT u.*
-            FROM parent_links l
-            JOIN users u ON u.id=l.student_id
-            WHERE l.parent_id=?
-        ''', (user['id'],)).fetchall()
-
-        con.close()
-
-        return render_template(
-            'parent_dashboard.html',
-            user=user,
-            children=children
-        )
-
-    # ADMIN DASHBOARD
+    if user['role'] == 'platform_admin':
+        return redirect(url_for('platform_dashboard'))
 
     if user['role'] == 'admin':
-
-        con.close()
-
         return redirect(url_for('admin_dashboard'))
 
-    con.close()
+    con = db()
+
+    try:
+
+        # STUDENT DASHBOARD
+
+        if user['role'] == 'student':
+
+            rows = con.execute('''
+                SELECT * FROM progress
+                WHERE student_id=?
+                ORDER BY subject, topic
+            ''', (user['id'],)).fetchall()
+
+            allocations = con.execute('''
+                SELECT
+                    a.subject,
+                    u.id AS teacher_id,
+                    u.name AS teacher_name
+                FROM allocations a
+                JOIN users u ON u.id=a.teacher_id
+                WHERE a.student_id=?
+                AND a.school_id=?
+                AND u.school_id=?
+                AND u.role='teacher'
+                ORDER BY a.subject
+            ''', (
+                user['id'],
+                user['school_id'],
+                user['school_id']
+            )).fetchall()
+
+            attempts = con.execute('''
+                SELECT
+                    COUNT(*) AS n,
+                    COALESCE(SUM(is_correct), 0) AS correct
+                FROM quiz_attempts
+                WHERE student_id=?
+            ''', (user['id'],)).fetchone()
+
+            week_start = (
+                date.today()
+                - timedelta(days=date.today().weekday())
+            ).isoformat()
+
+            open_tickets = con.execute('''
+                SELECT COUNT(*) AS n
+                FROM tickets
+                WHERE student_id=?
+                AND school_id=?
+                AND kind='Student session'
+                AND substr(created_at, 1, 10) >= ?
+            ''', (
+                user['id'],
+                user['school_id'],
+                week_start
+            )).fetchone()['n']
+
+            ticket_history = con.execute('''
+                SELECT
+                    id, kind, subject, message, status, created_at
+                FROM tickets
+                WHERE student_id=? AND school_id=?
+                ORDER BY created_at DESC
+                LIMIT 20
+            ''', (
+                user['id'],
+                user['school_id']
+            )).fetchall()
+
+            return render_template(
+                'student_dashboard.html',
+                user=user,
+                rows=rows,
+                allocations=allocations,
+                attempts=attempts,
+                open_tickets=open_tickets,
+                ticket_history=ticket_history
+            )
+
+        # TEACHER DASHBOARD
+
+        if user['role'] == 'teacher':
+
+            selected_grade = request.args.get(
+                'grade', ''
+            ).strip()
+
+            selected_subject = request.args.get(
+                'subject', ''
+            ).strip()
+
+            grade_rows = con.execute('''
+                SELECT DISTINCT u.grade
+                FROM allocations a
+                JOIN users u ON u.id=a.student_id
+                WHERE a.teacher_id=?
+                AND a.school_id=?
+                ORDER BY u.grade
+            ''', (
+                user['id'],
+                user['school_id']
+            )).fetchall()
+
+            subject_rows = con.execute('''
+                SELECT DISTINCT subject
+                FROM allocations
+                WHERE teacher_id=? AND school_id=?
+                ORDER BY subject
+            ''', (
+                user['id'],
+                user['school_id']
+            )).fetchall()
+
+            conditions = [
+                'a.teacher_id=?',
+                'a.school_id=?',
+                'u.school_id=?',
+                "u.role='student'"
+            ]
+
+            params = [
+                user['id'],
+                user['school_id'],
+                user['school_id']
+            ]
+
+            if selected_grade:
+                conditions.append('u.grade=?')
+                params.append(selected_grade)
+
+            if selected_subject:
+                conditions.append('a.subject=?')
+                params.append(selected_subject)
+
+            students = con.execute(f'''
+                SELECT
+                    u.id,
+                    u.name,
+                    u.roll_no,
+                    u.grade,
+                    u.board,
+                    a.subject,
+                    COALESCE(SUM(p.attempts), 0) AS attempts,
+                    COALESCE(SUM(p.correct), 0) AS correct,
+
+                    CASE
+                        WHEN COALESCE(SUM(p.attempts), 0)=0 THEN 0
+                        ELSE ROUND(
+                            100.0 * SUM(p.correct) / SUM(p.attempts)
+                        )
+                    END AS accuracy
+
+                FROM allocations a
+
+                JOIN users u ON u.id=a.student_id
+
+                LEFT JOIN progress p
+                    ON p.student_id=u.id
+                    AND p.subject=a.subject
+
+                WHERE {' AND '.join(conditions)}
+
+                GROUP BY
+                    u.id, u.name, u.roll_no,
+                    u.grade, u.board, a.subject
+
+                ORDER BY u.grade, u.name, a.subject
+            ''', params).fetchall()
+
+            tickets = con.execute('''
+                SELECT t.*, s.name AS student_name
+                FROM tickets t
+                LEFT JOIN users s
+                    ON s.id=t.student_id
+                    AND s.school_id=t.school_id
+                WHERE t.teacher_id=?
+                AND t.school_id=?
+                ORDER BY t.created_at DESC
+                LIMIT 30
+            ''', (
+                user['id'],
+                user['school_id']
+            )).fetchall()
+
+            return render_template(
+                'teacher_dashboard.html',
+                user=user,
+                students=students,
+                tickets=tickets,
+                grades=[r['grade'] for r in grade_rows],
+                teacher_subjects=[
+                    r['subject'] for r in subject_rows
+                ],
+                selected_grade=selected_grade,
+                selected_subject=selected_subject
+            )
+
+        # PARENT DASHBOARD
+
+        if user['role'] == 'parent':
+
+            children = con.execute('''
+                SELECT u.*
+                FROM parent_links l
+                JOIN users u ON u.id=l.student_id
+                WHERE l.parent_id=?
+                AND u.school_id=?
+                ORDER BY u.name
+            ''', (
+                user['id'],
+                user['school_id']
+            )).fetchall()
+
+            return render_template(
+                'parent_dashboard.html',
+                user=user,
+                children=children
+            )
+
+    finally:
+        con.close()
 
     abort(403)
 
 
 # --------------------------------------------------
-# SCHOOL ADMINISTRATOR DASHBOARD
+# PLATFORM ADMIN: CREATE SCHOOLS AND SCHOOL ADMINS
+# --------------------------------------------------
+
+@app.route('/platform', methods=['GET', 'POST'])
+@role_required('platform_admin')
+def platform_dashboard():
+
+    con = db()
+
+    try:
+
+        if request.method == 'POST':
+
+            school_name = request.form.get(
+                'school_name', ''
+            ).strip()
+
+            school_code = request.form.get(
+                'school_code', ''
+            ).strip().upper()
+
+            admin_name = request.form.get(
+                'admin_name', ''
+            ).strip()
+
+            admin_email = request.form.get(
+                'admin_email', ''
+            ).strip().lower()
+
+            admin_phone = request.form.get(
+                'admin_phone', ''
+            ).strip()
+
+            admin_password = request.form.get(
+                'admin_password', ''
+            )
+
+            if not all([
+                school_name,
+                school_code,
+                admin_name,
+                admin_email,
+                admin_phone,
+                admin_password
+            ]):
+                flash(
+                    'Complete all school and administrator details.',
+                    'error'
+                )
+                return redirect(url_for('platform_dashboard'))
+
+            if not school_code_is_valid(school_code):
+                flash(
+                    'School code must be 4–20 characters using letters, '
+                    'numbers or hyphens.',
+                    'error'
+                )
+                return redirect(url_for('platform_dashboard'))
+
+            if len(admin_password) < 8:
+                flash(
+                    'School administrator password must contain at least '
+                    '8 characters.',
+                    'error'
+                )
+                return redirect(url_for('platform_dashboard'))
+
+            try:
+
+                cur = con.execute('''
+                    INSERT INTO schools
+                    (school_name, school_code, is_active, created_at)
+                    VALUES (?, ?, 1, ?)
+                ''', (
+                    school_name,
+                    school_code,
+                    datetime.now().isoformat(timespec='seconds')
+                ))
+
+                school_id = cur.lastrowid
+
+                con.execute('''
+                    INSERT INTO users
+                    (
+                        name, email, phone, password_hash,
+                        role, school_id, created_at
+                    )
+                    VALUES (?, ?, ?, ?, 'admin', ?, ?)
+                ''', (
+                    admin_name,
+                    admin_email,
+                    admin_phone,
+                    generate_password_hash(admin_password),
+                    school_id,
+                    datetime.now().isoformat(timespec='seconds')
+                ))
+
+                con.commit()
+
+                flash(
+                    f'School created. Share school code {school_code} '
+                    'with its students and parents.',
+                    'success'
+                )
+
+            except sqlite3.IntegrityError:
+
+                con.rollback()
+
+                flash(
+                    'That school code or administrator email is already in use.',
+                    'error'
+                )
+
+            return redirect(url_for('platform_dashboard'))
+
+        schools = con.execute('''
+            SELECT s.*, COUNT(u.id) AS account_count
+            FROM schools s
+            LEFT JOIN users u ON u.school_id=s.id
+            GROUP BY s.id
+            ORDER BY s.school_name
+        ''').fetchall()
+
+        return render_template(
+            'platform_admin_dashboard.html',
+            schools=schools
+        )
+
+    finally:
+        con.close()
+
+
+# --------------------------------------------------
+# SCHOOL ADMIN: TEACHERS, ASSIGNMENTS, STUDENTS
 # --------------------------------------------------
 
 @app.route('/admin', methods=['GET', 'POST'])
 @role_required('admin')
 def admin_dashboard():
 
+    user = current_user()
+    school_id = user['school_id']
+
+    if not school_id:
+        abort(403)
+
     con = db()
 
-    if request.method == 'POST':
+    try:
 
-        action = request.form.get('action')
+        if request.method == 'POST':
 
-        # CREATE TEACHER ACCOUNT
+            action = request.form.get('action', '')
 
-        if action == 'create_teacher':
+            # CREATE TEACHER
 
-            name = request.form.get('name', '').strip()
-            email = request.form.get('email', '').strip().lower()
-            phone = request.form.get('phone', '').strip()
-            password = request.form.get('password', '')
+            if action == 'create_teacher':
 
-            if not all([name, email, phone, password]):
+                name = request.form.get(
+                    'name', ''
+                ).strip()
 
-                flash('Complete all teacher details.', 'error')
+                email = request.form.get(
+                    'email', ''
+                ).strip().lower()
 
-            elif len(password) < 8:
+                phone = request.form.get(
+                    'phone', ''
+                ).strip()
 
-                flash('Teacher password must contain at least 8 characters.', 'error')
+                password = request.form.get(
+                    'password', ''
+                )
 
-            else:
+                if (
+                    not all([name, email, phone, password])
+                    or len(password) < 8
+                ):
+                    flash(
+                        'Enter all teacher details and use a password '
+                        'with at least 8 characters.',
+                        'error'
+                    )
 
-                try:
+                else:
+
+                    try:
+
+                        con.execute('''
+                            INSERT INTO users
+                            (
+                                name, email, phone, password_hash,
+                                role, school_id, created_at
+                            )
+                            VALUES (?, ?, ?, ?, 'teacher', ?, ?)
+                        ''', (
+                            name,
+                            email,
+                            phone,
+                            generate_password_hash(password),
+                            school_id,
+                            datetime.now().isoformat(timespec='seconds')
+                        ))
+
+                        con.commit()
+
+                        flash(
+                            'Teacher account created for your school.',
+                            'success'
+                        )
+
+                    except sqlite3.IntegrityError:
+
+                        con.rollback()
+
+                        flash(
+                            'That email address is already registered.',
+                            'error'
+                        )
+
+            # ASSIGN TEACHER TO CLASS AND SUBJECT
+
+            elif action == 'assign_class':
+
+                grade = request.form.get(
+                    'grade', ''
+                ).strip()
+
+                board = request.form.get(
+                    'board', ''
+                ).strip()
+
+                subject = request.form.get(
+                    'subject', ''
+                ).strip()
+
+                teacher_raw = request.form.get(
+                    'teacher_id', ''
+                ).strip()
+
+                teacher = None
+
+                if teacher_raw.isdigit():
+
+                    teacher = con.execute('''
+                        SELECT id FROM users
+                        WHERE id=?
+                        AND role='teacher'
+                        AND school_id=?
+                    ''', (
+                        int(teacher_raw),
+                        school_id
+                    )).fetchone()
+
+                if (
+                    not all([grade, board, subject])
+                    or subject not in SUBJECTS
+                    or not teacher
+                ):
+
+                    flash(
+                        'Choose a valid class, board, subject and teacher '
+                        'from your school.',
+                        'error'
+                    )
+
+                else:
 
                     con.execute('''
-                        INSERT INTO users
-                        (name, email, phone, password_hash, role, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?)
+                        INSERT INTO class_teacher_assignments
+                        (school_id, grade, board, subject, teacher_id)
+                        VALUES (?, ?, ?, ?, ?)
+
+                        ON CONFLICT(school_id, grade, board, subject)
+                        DO UPDATE SET teacher_id=excluded.teacher_id
                     ''', (
-                        name,
-                        email,
-                        phone,
-                        generate_password_hash(password),
-                        'teacher',
-                        datetime.now().isoformat(timespec='seconds')
+                        school_id,
+                        grade,
+                        board,
+                        subject,
+                        teacher['id']
                     ))
+
+                    students = con.execute('''
+                        SELECT id FROM users
+                        WHERE role='student'
+                        AND school_id=?
+                        AND grade=?
+                        AND board=?
+                    ''', (
+                        school_id,
+                        grade,
+                        board
+                    )).fetchall()
+
+                    for student in students:
+
+                        con.execute('''
+                            INSERT INTO allocations
+                            (student_id, teacher_id, subject, school_id)
+                            VALUES (?, ?, ?, ?)
+
+                            ON CONFLICT(student_id, subject)
+                            DO UPDATE SET
+                                teacher_id=excluded.teacher_id,
+                                school_id=excluded.school_id
+                        ''', (
+                            student['id'],
+                            teacher['id'],
+                            subject,
+                            school_id
+                        ))
 
                     con.commit()
 
-                    flash('Teacher account created successfully.', 'success')
+                    flash(
+                        'Teacher assignment saved and matching students updated.',
+                        'success'
+                    )
 
-                except sqlite3.IntegrityError:
+            return redirect(url_for('admin_dashboard'))
 
-                    con.rollback()
+        school = con.execute('''
+            SELECT * FROM schools
+            WHERE id=?
+        ''', (school_id,)).fetchone()
 
-                    flash('This email is already registered.', 'error')
+        teachers = con.execute('''
+            SELECT id, name, email
+            FROM users
+            WHERE role='teacher'
+            AND school_id=?
+            ORDER BY name
+        ''', (school_id,)).fetchall()
 
-        # ASSIGN TEACHER TO CLASS AND SUBJECT
+        students = con.execute('''
+            SELECT id, name, roll_no, grade, board
+            FROM users
+            WHERE role='student'
+            AND school_id=?
+            ORDER BY grade, name
+        ''', (school_id,)).fetchall()
 
-        elif action == 'assign_class':
+        assignments = con.execute('''
+            SELECT
+                c.grade,
+                c.board,
+                c.subject,
+                u.name AS teacher_name
+            FROM class_teacher_assignments c
+            JOIN users u
+                ON u.id=c.teacher_id
+                AND u.school_id=c.school_id
+            WHERE c.school_id=?
+            ORDER BY c.grade, c.subject
+        ''', (school_id,)).fetchall()
 
-            grade = request.form.get('grade', '').strip()
-            board = request.form.get('board', '').strip()
-            subject = request.form.get('subject', '').strip()
-            teacher_id = request.form.get('teacher_id', '').strip()
+        tickets = con.execute('''
+            SELECT
+                t.*,
+                s.name AS student_name
+            FROM tickets t
+            LEFT JOIN users s
+                ON s.id=t.student_id
+                AND s.school_id=t.school_id
+            WHERE t.school_id=?
+            AND t.teacher_id IS NULL
+            ORDER BY t.created_at DESC
+            LIMIT 30
+        ''', (school_id,)).fetchall()
 
-            teacher = None
+        return render_template(
+            'admin_dashboard.html',
+            school=school,
+            teachers=teachers,
+            students=students,
+            assignments=assignments,
+            tickets=tickets
+        )
 
-            if teacher_id.isdigit():
-
-                teacher = con.execute('''
-                    SELECT id FROM users
-                    WHERE id=? AND role='teacher'
-                ''', (int(teacher_id),)).fetchone()
-
-            if not all([grade, board, subject]) or subject not in SUBJECTS or not teacher:
-
-                flash('Please provide valid class, board, subject and teacher details.', 'error')
-
-            else:
-
-                con.execute('''
-                    INSERT INTO class_teacher_assignments
-                    (grade, board, subject, teacher_id)
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT(grade, board, subject)
-                    DO UPDATE SET teacher_id=excluded.teacher_id
-                ''', (
-                    grade,
-                    board,
-                    subject,
-                    teacher['id']
-                ))
-
-                # Apply this assignment to students already registered.
-
-                students = con.execute('''
-                    SELECT id FROM users
-                    WHERE role='student' AND grade=? AND board=?
-                ''', (grade, board)).fetchall()
-
-                for student in students:
-
-                    con.execute('''
-                        INSERT INTO allocations
-                        (student_id, teacher_id, subject)
-                        VALUES (?, ?, ?)
-                        ON CONFLICT(student_id, subject)
-                        DO UPDATE SET teacher_id=excluded.teacher_id
-                    ''', (
-                        student['id'],
-                        teacher['id'],
-                        subject
-                    ))
-
-                con.commit()
-
-                flash(
-                    'Teacher assigned successfully. Existing students have also been updated.',
-                    'success'
-                )
-
+    finally:
         con.close()
-
-        return redirect(url_for('admin_dashboard'))
-
-    # ADMIN DASHBOARD DATA
-
-    teachers = con.execute('''
-        SELECT id, name, email
-        FROM users
-        WHERE role='teacher'
-        ORDER BY name
-    ''').fetchall()
-
-    students = con.execute('''
-        SELECT id, name, roll_no, grade, board
-        FROM users
-        WHERE role='student'
-        ORDER BY grade, name
-    ''').fetchall()
-
-    assignments = con.execute('''
-        SELECT
-            c.grade,
-            c.board,
-            c.subject,
-            u.name AS teacher_name
-        FROM class_teacher_assignments c
-        JOIN users u ON u.id=c.teacher_id
-        ORDER BY c.grade, c.subject
-    ''').fetchall()
-
-    tickets = con.execute('''
-        SELECT
-            t.*,
-            s.name AS student_name
-        FROM tickets t
-        LEFT JOIN users s ON s.id=t.student_id
-        WHERE t.teacher_id IS NULL
-        ORDER BY t.created_at DESC
-        LIMIT 30
-    ''').fetchall()
-
-    con.close()
-
-    return render_template_string('''
-
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Vidhyastra - School Admin</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-
-        <style>
-            body {
-                font-family: Arial, sans-serif;
-                background: #f4f5fb;
-                margin: 0;
-                padding: 25px;
-                color: #222;
-            }
-
-            .container {
-                max-width: 1000px;
-                margin: auto;
-            }
-
-            .panel {
-                background: white;
-                padding: 22px;
-                margin-bottom: 20px;
-                border-radius: 12px;
-            }
-
-            input, select {
-                padding: 11px;
-                margin: 7px 0;
-                width: 100%;
-                box-sizing: border-box;
-                border: 1px solid #ddd;
-                border-radius: 6px;
-            }
-
-            button {
-                background: #4f46e5;
-                color: white;
-                border: none;
-                padding: 12px 20px;
-                border-radius: 6px;
-                cursor: pointer;
-            }
-
-            table {
-                width: 100%;
-                border-collapse: collapse;
-            }
-
-            th, td {
-                text-align: left;
-                padding: 10px;
-                border-bottom: 1px solid #eee;
-            }
-
-            .message {
-                padding: 12px;
-                background: #e9f7ed;
-                margin-bottom: 10px;
-                border-radius: 6px;
-            }
-
-            a {
-                color: #4f46e5;
-            }
-        </style>
-    </head>
-
-    <body>
-    <div class="container">
-
-        <h1>Vidhyastra School Administration</h1>
-        <p>Manage teachers, students and class assignments.</p>
-
-        <p>
-            <a href="{{ url_for('dashboard') }}">Dashboard</a> |
-            <a href="{{ url_for('logout') }}">Logout</a>
-        </p>
-
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% for category, message in messages %}
-                <div class="message">{{ message }}</div>
-            {% endfor %}
-        {% endwith %}
-
-        <div class="panel">
-            <h2>Create Teacher Account</h2>
-
-            <form method="POST">
-
-                <input type="hidden" name="action" value="create_teacher">
-
-                <input name="name" placeholder="Teacher name" required>
-
-                <input name="email" type="email" placeholder="Teacher email" required>
-
-                <input name="phone" placeholder="Phone number" required>
-
-                <input name="password" type="password"
-                       placeholder="Password (minimum 8 characters)" required>
-
-                <button type="submit">Create Teacher</button>
-
-            </form>
-        </div>
-
-        <div class="panel">
-            <h2>Assign Teacher to Class and Subject</h2>
-
-            <form method="POST">
-
-                <input type="hidden" name="action" value="assign_class">
-
-                <label>Class</label>
-
-                <select name="grade" required>
-                    <option value="">Select class</option>
-                    {% for g in ['6','7','8','9','10'] %}
-                    <option value="Class {{ g }}">Class {{ g }}</option>
-                    {% endfor %}
-                </select>
-
-                <label>Board</label>
-
-                <input name="board" placeholder="Example: CBSE or State Board" required>
-
-                <label>Subject</label>
-
-                <select name="subject" required>
-                    <option value="">Select subject</option>
-                    {% for s in subjects %}
-                    <option value="{{ s }}">{{ s }}</option>
-                    {% endfor %}
-                </select>
-
-                <label>Teacher</label>
-
-                <select name="teacher_id" required>
-                    <option value="">Select teacher</option>
-                    {% for t in teachers %}
-                    <option value="{{ t.id }}">{{ t.name }} ({{ t.email }})</option>
-                    {% endfor %}
-                </select>
-
-                <button type="submit">Save Assignment</button>
-
-            </form>
-        </div>
-
-        <div class="panel">
-            <h2>Existing Class Assignments</h2>
-
-            <table>
-                <tr>
-                    <th>Class</th>
-                    <th>Board</th>
-                    <th>Subject</th>
-                    <th>Teacher</th>
-                </tr>
-
-                {% for a in assignments %}
-                <tr>
-                    <td>{{ a.grade }}</td>
-                    <td>{{ a.board }}</td>
-                    <td>{{ a.subject }}</td>
-                    <td>{{ a.teacher_name }}</td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="4">No assignments created yet.</td>
-                </tr>
-                {% endfor %}
-            </table>
-        </div>
-
-        <div class="panel">
-            <h2>Registered Students</h2>
-
-            <table>
-                <tr>
-                    <th>Name</th>
-                    <th>Roll Number</th>
-                    <th>Class</th>
-                    <th>Board</th>
-                </tr>
-
-                {% for s in students %}
-                <tr>
-                    <td>{{ s.name }}</td>
-                    <td>{{ s.roll_no }}</td>
-                    <td>{{ s.grade }}</td>
-                    <td>{{ s.board }}</td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="4">No students registered yet.</td>
-                </tr>
-                {% endfor %}
-            </table>
-        </div>
-
-        <div class="panel">
-            <h2>Unassigned Requests</h2>
-
-            {% for t in tickets %}
-                <p>
-                    <b>{{ t.student_name or 'Parent' }}</b>:
-                    {{ t.message }}
-                    <small>({{ t.status }})</small>
-                </p>
-            {% else %}
-                <p>No unassigned requests.</p>
-            {% endfor %}
-        </div>
-
-    </div>
-    </body>
-    </html>
-
-    ''',
-        teachers=teachers,
-        students=students,
-        assignments=assignments,
-        tickets=tickets,
-        subjects=SUBJECTS
-    )
 
 
 # --------------------------------------------------
-# PROFILE
+# PROFILE AND REPORTS
 # --------------------------------------------------
 
 @app.route('/profile', methods=['GET', 'POST'])
@@ -1138,31 +1662,183 @@ def profile():
 
     if request.method == 'POST':
 
+        new_password = request.form.get(
+            'new_password', ''
+        )
+
+        confirm_password = request.form.get(
+            'confirm_password', ''
+        )
+
+        current_password = request.form.get(
+            'current_password', ''
+        )
+
+        if new_password:
+
+            if not check_password_hash(
+                user['password_hash'],
+                current_password
+            ):
+                flash(
+                    'Your current password is incorrect; '
+                    'password was not changed.',
+                    'error'
+                )
+                return redirect(url_for('profile'))
+
+            if len(new_password) < 8:
+                flash(
+                    'New password must contain at least 8 characters.',
+                    'error'
+                )
+                return redirect(url_for('profile'))
+
+            if new_password != confirm_password:
+                flash(
+                    'New password and confirmation do not match.',
+                    'error'
+                )
+                return redirect(url_for('profile'))
+
         con = db()
 
-        con.execute('''
-            UPDATE users
-            SET theme=?, language=?, bot_name=?
-            WHERE id=?
-        ''', (
-            request.form.get('theme', 'light'),
-            request.form.get('language', 'English'),
-            request.form.get('bot_name', 'Astra').strip()[:30] or 'Astra',
-            user['id']
-        ))
+        try:
 
-        con.commit()
-        con.close()
+            con.execute('''
+                UPDATE users
+                SET theme=?, language=?, bot_name=?
+                WHERE id=?
+            ''', (
+                request.form.get('theme', 'light'),
+                request.form.get('language', 'English'),
+                request.form.get('bot_name', 'Astra').strip()[:30] or 'Astra',
+                user['id']
+            ))
 
-        flash('Preferences updated.', 'success')
+            if new_password:
+
+                con.execute(
+                    'UPDATE users SET password_hash=? WHERE id=?',
+                    (
+                        generate_password_hash(new_password),
+                        user['id']
+                    )
+                )
+
+            con.commit()
+
+        finally:
+            con.close()
+
+        flash(
+            'Preferences and account details updated.',
+            'success'
+        )
 
         return redirect(url_for('profile'))
 
-    return render_template('profile.html', user=user)
+    return render_template(
+        'profile.html',
+        user=user
+    )
+
+
+@app.route('/report/<int:student_id>')
+@login_required
+def report(student_id):
+
+    user = current_user()
+    con = db()
+
+    try:
+
+        student = con.execute('''
+            SELECT * FROM users
+            WHERE id=? AND role='student'
+        ''', (student_id,)).fetchone()
+
+        if not student:
+            abort(404)
+
+        allowed = user['role'] == 'platform_admin'
+
+        if user['role'] == 'student':
+
+            allowed = (
+                user['id'] == student_id
+                and user['school_id'] == student['school_id']
+            )
+
+        elif user['role'] == 'admin':
+
+            allowed = (
+                user['school_id'] == student['school_id']
+            )
+
+        elif user['role'] == 'teacher':
+
+            allowed = (
+                user['school_id'] == student['school_id']
+                and bool(con.execute('''
+                    SELECT 1 FROM allocations
+                    WHERE teacher_id=?
+                    AND student_id=?
+                    AND school_id=?
+                ''', (
+                    user['id'],
+                    student_id,
+                    user['school_id']
+                )).fetchone())
+            )
+
+        elif user['role'] == 'parent':
+
+            allowed = (
+                user['school_id'] == student['school_id']
+                and bool(con.execute('''
+                    SELECT 1 FROM parent_links
+                    WHERE parent_id=? AND student_id=?
+                ''', (
+                    user['id'],
+                    student_id
+                )).fetchone())
+            )
+
+        if not allowed:
+            abort(403)
+
+        progress = con.execute('''
+            SELECT * FROM progress
+            WHERE student_id=?
+            ORDER BY subject, topic
+        ''', (student_id,)).fetchall()
+
+        attempts = con.execute('''
+            SELECT
+                COUNT(*) AS n,
+                COALESCE(SUM(is_correct), 0) AS correct
+            FROM quiz_attempts
+            WHERE student_id=?
+            AND substr(created_at, 1, 7)=?
+        ''', (
+            student_id,
+            date.today().strftime('%Y-%m')
+        )).fetchone()
+
+        return render_template(
+            'report.html',
+            student=student,
+            progress=progress,
+            attempts=attempts
+        )
+
+    finally:
+        con.close()
 
 
 # --------------------------------------------------
-# QUIZ
+# QUIZ AND LEARNING ASSISTANT
 # --------------------------------------------------
 
 @app.route('/quiz', methods=['GET', 'POST'])
@@ -1171,8 +1847,13 @@ def quiz():
 
     user = current_user()
 
-    subject = request.values.get('subject', 'Mathematics')
-    topic = request.values.get('topic', 'Fractions')
+    subject = request.values.get(
+        'subject', 'Mathematics'
+    )
+
+    topic = request.values.get(
+        'topic', 'Fractions'
+    )
 
     if subject not in TOPIC_BANK:
         subject = 'Mathematics'
@@ -1185,94 +1866,117 @@ def quiz():
     if request.method == 'POST':
 
         try:
-            qindex = int(request.form.get('qindex', '0'))
+            qindex = int(
+                request.form.get('qindex', '0')
+            )
+
         except ValueError:
             qindex = 0
 
-        qindex = qindex % len(questions)
+        qindex %= len(questions)
 
-        q = questions[qindex]
+        question = questions[qindex]
 
-        selected = request.form.get('answer', '')
+        selected = request.form.get(
+            'answer', ''
+        )
 
-        correct = int(selected == q['answer'])
+        correct = int(
+            selected == question['answer']
+        )
 
         now = datetime.now().isoformat(timespec='seconds')
 
         con = db()
 
-        con.execute('''
-            INSERT INTO quiz_attempts
-            (student_id, subject, topic, question, selected, answer, is_correct, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            user['id'],
-            subject,
-            topic,
-            q['q'],
-            selected,
-            q['answer'],
-            correct,
-            now
-        ))
+        try:
 
-        row = con.execute('''
-            SELECT * FROM progress
-            WHERE student_id=? AND subject=? AND topic=?
-        ''', (user['id'], subject, topic)).fetchone()
-
-        if row:
-
-            attempts = row['attempts'] + 1
-            corr = row['correct'] + correct
-
-            level = min(
-                5,
-                max(
-                    1,
-                    row['level'] +
-                    (
-                        1 if correct and attempts >= 3
-                        and corr / attempts >= 0.8 else 0
-                    )
+            con.execute('''
+                INSERT INTO quiz_attempts
+                (
+                    student_id, subject, topic, question,
+                    selected, answer, is_correct, created_at
                 )
-            )
-
-            con.execute('''
-                UPDATE progress
-                SET attempts=?, correct=?, level=?, last_seen=?
-                WHERE id=?
-            ''', (
-                attempts,
-                corr,
-                level,
-                now,
-                row['id']
-            ))
-
-        else:
-
-            con.execute('''
-                INSERT INTO progress
-                (student_id, subject, topic, attempts, correct, level, last_seen)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 user['id'],
                 subject,
                 topic,
-                1,
+                question['q'],
+                selected,
+                question['answer'],
                 correct,
-                1,
                 now
             ))
 
-        con.commit()
-        con.close()
+            row = con.execute('''
+                SELECT * FROM progress
+                WHERE student_id=?
+                AND subject=?
+                AND topic=?
+            ''', (
+                user['id'],
+                subject,
+                topic
+            )).fetchone()
+
+            if row:
+
+                attempts_count = row['attempts'] + 1
+                correct_count = row['correct'] + correct
+
+                level = min(
+                    5,
+                    max(
+                        1,
+                        row['level'] + (
+                            1
+                            if correct
+                            and attempts_count >= 3
+                            and correct_count / attempts_count >= 0.8
+                            else 0
+                        )
+                    )
+                )
+
+                con.execute('''
+                    UPDATE progress
+                    SET attempts=?, correct=?, level=?, last_seen=?
+                    WHERE id=?
+                ''', (
+                    attempts_count,
+                    correct_count,
+                    level,
+                    now,
+                    row['id']
+                ))
+
+            else:
+
+                con.execute('''
+                    INSERT INTO progress
+                    (
+                        student_id, subject, topic,
+                        attempts, correct, level, last_seen
+                    )
+                    VALUES (?, ?, ?, 1, ?, 1, ?)
+                ''', (
+                    user['id'],
+                    subject,
+                    topic,
+                    correct,
+                    now
+                ))
+
+            con.commit()
+
+        finally:
+            con.close()
 
         return render_template(
             'quiz_result.html',
             user=user,
-            question=q,
+            question=question,
             selected=selected,
             correct=bool(correct),
             subject=subject,
@@ -1289,24 +1993,26 @@ def quiz():
     )
 
 
-# --------------------------------------------------
-# STUDY ASSISTANT
-# --------------------------------------------------
-
 @app.route('/assistant', methods=['GET', 'POST'])
 @role_required('student')
 def assistant():
 
     user = current_user()
-
     response = None
 
     if request.method == 'POST':
 
-        prompt = request.form.get('prompt', '').strip()
+        prompt = request.form.get(
+            'prompt', ''
+        ).strip()
 
-        subject = request.form.get('subject', 'Mathematics')
-        topic = request.form.get('topic', 'Fractions')
+        subject = request.form.get(
+            'subject', 'Mathematics'
+        )
+
+        topic = request.form.get(
+            'topic', 'Fractions'
+        )
 
         if subject not in TOPIC_BANK:
             subject = 'Mathematics'
@@ -1316,7 +2022,7 @@ def assistant():
 
         low = prompt.lower()
 
-        if any(w in low for w in [
+        if any(word in low for word in [
             'quiz', 'mcq', 'practice', 'test', 'question'
         ]):
 
@@ -1326,18 +2032,18 @@ def assistant():
                 topic=topic
             ))
 
-        if any(w in low for w in [
+        if any(word in low for word in [
             'schedule', 'exam', 'plan', 'timetable'
         ]):
 
             response = (
                 f"Let's make a small plan for {topic}: "
-                "10 minutes to revise the concept, "
-                "15 minutes for practice, and 5 minutes to check mistakes. "
-                "Ask your teacher to confirm any school exam dates."
+                "10 minutes to revise, 15 minutes for practice, "
+                "and 5 minutes to check mistakes. "
+                "Ask your teacher to confirm school exam dates."
             )
 
-        elif any(w in low for w in [
+        elif any(word in low for word in [
             'stuck', 'wrong', 'dont understand',
             "don't understand", 'help'
         ]):
@@ -1353,8 +2059,9 @@ def assistant():
             response = (
                 f"I'm {user['bot_name']}, your Vidhyastra study buddy. "
                 f"For {topic}, start with one worked example, "
-                "then try a fresh question without looking at the answer. "
-                "This prototype uses guided responses rather than a live generative AI model."
+                "then try a fresh question. "
+                "This prototype uses guided responses rather than "
+                "a live generative AI model."
             )
 
     return render_template(
@@ -1363,218 +2070,221 @@ def assistant():
         response=response,
         subjects=list(TOPIC_BANK.keys()),
         topics_by_subject={
-            k: list(v.keys())
-            for k, v in TOPIC_BANK.items()
+            key: list(value.keys())
+            for key, value in TOPIC_BANK.items()
         }
     )
 
 
 # --------------------------------------------------
-# SESSION AND HELP REQUESTS
+# SUPPORT TICKETS
 # --------------------------------------------------
 
 @app.route('/ticket', methods=['POST'])
 @login_required
 def create_ticket():
+
     user = current_user()
-    kind = request.form.get('kind', 'Student session')
-    message = request.form.get('message', '').strip()
+
+    message = request.form.get(
+        'message', ''
+    ).strip()
 
     if not message:
-        flash('Please add a short message.', 'error')
+        flash(
+            'Please add a short message.',
+            'error'
+        )
         return redirect(url_for('dashboard'))
 
     con = db()
 
-    if user['role'] == 'student':
-        subject = request.form.get('subject', '').strip()
+    try:
 
-        allocation = con.execute("""
-            SELECT teacher_id
-            FROM allocations
-            WHERE student_id = ? AND subject = ?
-        """, (user['id'], subject)).fetchone()
+        # STUDENT SUPPORT REQUEST
 
-        if not allocation:
-            con.close()
-            flash('No teacher is allocated for this subject yet.', 'error')
-            return redirect(url_for('dashboard'))
+        if user['role'] == 'student':
 
-        week_start = (
-            date.today() - timedelta(days=date.today().weekday())
-        ).isoformat()
+            subject = request.form.get(
+                'subject', ''
+            ).strip()
 
-        used = con.execute("""
-            SELECT COUNT(*) n
-            FROM tickets
-            WHERE student_id = ?
-            AND kind = 'Student session'
-            AND substr(created_at, 1, 10) >= ?
-        """, (user['id'], week_start)).fetchone()['n']
+            allocation = con.execute('''
+                SELECT a.teacher_id
+                FROM allocations a
+                JOIN users t ON t.id=a.teacher_id
+                WHERE a.student_id=?
+                AND a.school_id=?
+                AND a.subject=?
+                AND t.school_id=?
+                AND t.role='teacher'
+            ''', (
+                user['id'],
+                user['school_id'],
+                subject,
+                user['school_id']
+            )).fetchone()
 
-        if kind == 'Student session' and used >= 2:
-            con.close()
-            flash('You have used your two student-session requests for this week.', 'error')
-            return redirect(url_for('dashboard'))
+            if not allocation:
+                flash(
+                    'No teacher is allocated for this subject yet.',
+                    'error'
+                )
+                return redirect(url_for('dashboard'))
 
-        teacher_id = allocation['teacher_id']
+            week_start = (
+                date.today()
+                - timedelta(days=date.today().weekday())
+            ).isoformat()
 
-        con.execute("""
-            INSERT INTO tickets
-            (student_id, teacher_id, kind, message, created_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (
-            user['id'],
-            teacher_id,
-            kind,
-            message,
-            datetime.now().isoformat(timespec='seconds')
-        ))
+            used = con.execute('''
+                SELECT COUNT(*) AS n
+                FROM tickets
+                WHERE student_id=?
+                AND school_id=?
+                AND kind='Student session'
+                AND substr(created_at, 1, 10) >= ?
+            ''', (
+                user['id'],
+                user['school_id'],
+                week_start
+            )).fetchone()['n']
 
-    elif user['role'] == 'parent':
-        child = con.execute("""
-            SELECT student_id
-            FROM parent_links
-            WHERE parent_id = ?
-            LIMIT 1
-        """, (user['id'],)).fetchone()
+            if used >= 2:
+                flash(
+                    'You have used your two student-session requests '
+                    'for this week.',
+                    'error'
+                )
+                return redirect(url_for('dashboard'))
 
-        con.execute("""
-            INSERT INTO tickets
-            (parent_id, student_id, kind, message, created_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (
-            user['id'],
-            child['student_id'] if child else None,
-            'Parent-teacher meeting',
-            message,
-            datetime.now().isoformat(timespec='seconds')
-        ))
+            con.execute('''
+                INSERT INTO tickets
+                (
+                    student_id, teacher_id, kind, message,
+                    status, created_at, school_id, subject
+                )
+                VALUES (?, ?, 'Student session', ?, 'Open', ?, ?, ?)
+            ''', (
+                user['id'],
+                allocation['teacher_id'],
+                message,
+                datetime.now().isoformat(timespec='seconds'),
+                user['school_id'],
+                subject
+            ))
 
-    else:
+        # PARENT MEETING REQUEST
+
+        elif user['role'] == 'parent':
+
+            child = con.execute('''
+                SELECT student_id
+                FROM parent_links
+                WHERE parent_id=?
+                ORDER BY id
+                LIMIT 1
+            ''', (user['id'],)).fetchone()
+
+            student_id = (
+                child['student_id'] if child else None
+            )
+
+            con.execute('''
+                INSERT INTO tickets
+                (
+                    parent_id, student_id, kind, message,
+                    status, created_at, school_id, subject
+                )
+                VALUES (?, ?, 'Parent-teacher meeting', ?, 'Open', ?, ?, '')
+            ''', (
+                user['id'],
+                student_id,
+                message,
+                datetime.now().isoformat(timespec='seconds'),
+                user['school_id']
+            ))
+
+        else:
+            abort(403)
+
+        con.commit()
+
+        flash(
+            'Your request has been submitted.',
+            'success'
+        )
+
+        return redirect(url_for('dashboard'))
+
+    finally:
         con.close()
-        abort(403)
-
-    con.commit()
-    con.close()
-
-    flash('Request submitted.', 'success')
-    return redirect(url_for('dashboard'))
 
 
 # --------------------------------------------------
-# UPDATE SESSION REQUEST STATUS
+# UPDATE TICKET STATUS
 # --------------------------------------------------
 
 @app.route('/ticket/<int:ticket_id>/status', methods=['POST'])
 @role_required('teacher')
 def update_ticket(ticket_id):
-    allowed_statuses = ['Open', 'In review', 'Scheduled', 'Closed']
-    status = request.form.get('status', 'In review')
 
-    if status not in allowed_statuses:
+    user = current_user()
+
+    status = request.form.get(
+        'status', 'In review'
+    )
+
+    if status not in TICKET_STATUSES:
         abort(400)
 
     con = db()
 
-    ticket = con.execute("""
-        SELECT id FROM tickets
-        WHERE id = ? AND teacher_id = ?
-    """, (ticket_id, session['user_id'])).fetchone()
+    try:
 
-    if not ticket:
-        con.close()
-        abort(403)
+        ticket = con.execute('''
+            SELECT id
+            FROM tickets
+            WHERE id=?
+            AND teacher_id=?
+            AND school_id=?
+        ''', (
+            ticket_id,
+            user['id'],
+            user['school_id']
+        )).fetchone()
 
-    con.execute("""
-        UPDATE tickets
-        SET status = ?
-        WHERE id = ? AND teacher_id = ?
-    """, (status, ticket_id, session['user_id']))
+        if not ticket:
+            abort(403)
 
-    con.commit()
-    con.close()
+        con.execute('''
+            UPDATE tickets
+            SET status=?
+            WHERE id=?
+            AND teacher_id=?
+            AND school_id=?
+        ''', (
+            status,
+            ticket_id,
+            user['id'],
+            user['school_id']
+        ))
 
-    flash('Ticket status updated.', 'success')
-    return redirect(url_for('dashboard'))
+        con.commit()
 
-# --------------------------------------------------
-# REPORT
-# --------------------------------------------------
+        flash(
+            'Ticket status updated.',
+            'success'
+        )
 
-@app.route('/report/<int:student_id>')
-@login_required
-def report(student_id):
+        return redirect(url_for('dashboard'))
 
-    user = current_user()
-
-    con = db()
-
-    allowed = (
-        user['role'] == 'student'
-        and user['id'] == student_id
-    )
-
-    if user['role'] == 'teacher':
-
-        allowed = bool(con.execute('''
-            SELECT 1
-            FROM allocations
-            WHERE teacher_id=? AND student_id=?
-        ''', (user['id'], student_id)).fetchone())
-
-    if user['role'] == 'parent':
-
-        allowed = bool(con.execute('''
-            SELECT 1
-            FROM parent_links
-            WHERE parent_id=? AND student_id=?
-        ''', (user['id'], student_id)).fetchone())
-
-    if user['role'] == 'admin':
-        allowed = True
-
-    if not allowed:
-
+    finally:
         con.close()
 
-        abort(403)
-
-    student = con.execute(
-        'SELECT * FROM users WHERE id=?',
-        (student_id,)
-    ).fetchone()
-
-    progress = con.execute('''
-        SELECT * FROM progress
-        WHERE student_id=?
-        ORDER BY subject, topic
-    ''', (student_id,)).fetchall()
-
-    attempts = con.execute('''
-        SELECT
-            COUNT(*) AS n,
-            COALESCE(SUM(is_correct), 0) AS correct
-        FROM quiz_attempts
-        WHERE student_id=?
-        AND substr(created_at, 1, 7)=?
-    ''', (
-        student_id,
-        date.today().strftime('%Y-%m')
-    )).fetchone()
-
-    con.close()
-
-    return render_template(
-        'report.html',
-        student=student,
-        progress=progress,
-        attempts=attempts
-    )
-
 
 # --------------------------------------------------
-# MANIFEST
+# PWA AND ERROR HANDLERS
 # --------------------------------------------------
 
 @app.route('/manifest.json')
@@ -1591,23 +2301,13 @@ def manifest():
     })
 
 
-# --------------------------------------------------
-# SERVICE WORKER
-# --------------------------------------------------
-
 @app.route('/service-worker.js')
 def service_worker():
-
     return app.send_static_file('service-worker.js')
 
 
-# --------------------------------------------------
-# ERROR HANDLERS
-# --------------------------------------------------
-
 @app.errorhandler(403)
-def forbidden(e):
-
+def forbidden(error):
     return render_template(
         'error.html',
         code=403,
@@ -1616,8 +2316,7 @@ def forbidden(e):
 
 
 @app.errorhandler(404)
-def not_found(e):
-
+def not_found(error):
     return render_template(
         'error.html',
         code=404,
@@ -1632,5 +2331,6 @@ def not_found(e):
 init_db()
 
 if __name__ == '__main__':
-
-    app.run(debug=True)
+    app.run(
+        debug=os.environ.get('VIDHYASTRA_DEBUG', '1') == '1'
+    )

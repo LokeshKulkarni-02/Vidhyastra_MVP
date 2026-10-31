@@ -7,11 +7,12 @@
     <div class="page-heading">
         <span class="eyebrow">GET STARTED</span>
         <h1>Build your learning space.</h1>
-        <p>Choose your role. Student curriculum details help us organize the learning journey.</p>
+        <p>Choose your role and enter the school code provided by your school.</p>
     </div>
 
     <form class="form-card wide" method="post">
         <div class="form-grid">
+
             <label>Full name
                 <input name="name" required maxlength="100" autocomplete="name">
             </label>
@@ -36,6 +37,11 @@
                 </select>
             </label>
 
+            <label>School code
+                <input name="school_code" required maxlength="20" placeholder="e.g. GLEC2026" autocomplete="off">
+                <small>Ask your school administrator for this code.</small>
+            </label>
+
             <label>Preferred language
                 <select name="language">
                     <option>English</option>
@@ -48,6 +54,7 @@
                     <option>Bengali</option>
                 </select>
             </label>
+
         </div>
 
         <div id="student-fields">
@@ -57,6 +64,7 @@
             </div>
 
             <div class="form-grid">
+
                 <label>Region
                     <input name="region" placeholder="e.g. South India">
                 </label>
@@ -89,19 +97,20 @@
                         {% endfor %}
                     </select>
                 </label>
+
             </div>
         </div>
 
         <div id="parent-fields" class="hidden">
             <label>Student roll number (optional)
                 <input name="child_roll" placeholder="e.g. VDS-A1B2C3">
-                <small>You can link your child's account later if you don't have the roll number yet.</small>
+                <small>The roll number must belong to a student in the same school.</small>
             </label>
         </div>
 
         <p class="notice">
             A unique Vidhyastra roll number is created for student accounts.
-            This prototype uses demo syllabus content; full board-wise syllabus data must be added before launch.
+            School codes identify the school; they do not replace any admission verification your school may require.
         </p>
 
         <button class="button primary full" type="submit">

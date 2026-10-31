@@ -1,0 +1,213 @@
+
+{% extends 'base.html' %}
+{% block title %}School administration · Vidhyastra{% endblock %}
+
+{% block content %}
+
+<section class="dashboard-head">
+    <div>
+        <span class="eyebrow">SCHOOL ADMINISTRATION</span>
+        <h1>{{ school['school_name'] }}</h1>
+        <p>Manage this school's teachers, class assignments, students and unassigned parent requests.</p>
+    </div>
+
+    <div class="roll-card">
+        <small>SCHOOL CODE</small>
+        <strong>{{ school['school_code'] }}</strong>
+        <span>Share with approved students and parents</span>
+    </div>
+</section>
+
+<section class="content-grid">
+
+    <div class="panel">
+        <h2>Create teacher account</h2>
+
+        <form method="post">
+            <input type="hidden" name="action" value="create_teacher">
+
+            <label>Teacher name
+                <input name="name" required maxlength="100">
+            </label>
+
+            <label>Email
+                <input name="email" type="email" required>
+            </label>
+
+            <label>Phone
+                <input name="phone" required>
+            </label>
+
+            <label>Temporary password
+                <input name="password" type="password" minlength="8" required>
+            </label>
+
+            <button class="button primary" type="submit">
+                Create teacher
+            </button>
+        </form>
+    </div>
+
+    <div class="panel">
+        <h2>Assign teacher to class and subject</h2>
+
+        <form method="post">
+            <input type="hidden" name="action" value="assign_class">
+
+            <label>Class
+                <select name="grade" required>
+                    <option value="">Select class</option>
+                    {% for n in range(6,11) %}
+                    <option>Class {{ n }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <label>Board
+                <input name="board" placeholder="CBSE or State Board" required>
+            </label>
+
+            <label>Subject
+                <select name="subject" required>
+                    <option value="">Select subject</option>
+                    {% for s in subjects %}
+                    <option value="{{ s }}">{{ s }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <label>Teacher
+                <select name="teacher_id" required>
+                    <option value="">Select teacher</option>
+                    {% for t in teachers %}
+                    <option value="{{ t.id }}">{{ t.name }} ({{ t.email }})</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <button class="button primary" type="submit">
+                Save assignment
+            </button>
+        </form>
+    </div>
+
+</section>
+
+<section class="section-head">
+    <div>
+        <span class="eyebrow">YOUR SCHOOL</span>
+        <h2>Existing class assignments</h2>
+    </div>
+</section>
+
+<div class="panel">
+
+    {% if assignments %}
+
+    <table>
+        <thead>
+            <tr>
+                <th>Class</th>
+                <th>Board</th>
+                <th>Subject</th>
+                <th>Teacher</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for a in assignments %}
+            <tr>
+                <td>{{ a.grade }}</td>
+                <td>{{ a.board }}</td>
+                <td>{{ a.subject }}</td>
+                <td>{{ a.teacher_name }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {% else %}
+
+    <p class="muted">No class assignments yet.</p>
+
+    {% endif %}
+
+</div>
+
+<section class="section-head">
+    <div>
+        <span class="eyebrow">ENROLMENT</span>
+        <h2>Registered students</h2>
+    </div>
+</section>
+
+<div class="panel">
+
+    {% if students %}
+
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Roll number</th>
+                <th>Class</th>
+                <th>Board</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for s in students %}
+            <tr>
+                <td>{{ s.name }}</td>
+                <td>{{ s.roll_no }}</td>
+                <td>{{ s.grade }}</td>
+                <td>{{ s.board }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {% else %}
+
+    <p class="muted">
+        No students have registered with this school's code yet.
+    </p>
+
+    {% endif %}
+
+</div>
+
+<section class="section-head">
+    <div>
+        <span class="eyebrow">UNASSIGNED SUPPORT</span>
+        <h2>Parent meeting requests</h2>
+    </div>
+</section>
+
+<div class="panel">
+
+    {% if tickets %}
+
+        {% for t in tickets %}
+
+        <div class="ticket-row">
+            <div>
+                <b>{{ t.student_name or 'Parent / guardian' }}</b>
+                <small>
+                    {{ t.created_at[:16].replace('T',' ') }} · {{ t.status }}
+                </small>
+                <p>{{ t.message }}</p>
+            </div>
+        </div>
+
+        {% endfor %}
+
+    {% else %}
+
+        <p class="muted">No unassigned requests.</p>
+
+    {% endif %}
+
+</div>
+
+{% endblock %}
