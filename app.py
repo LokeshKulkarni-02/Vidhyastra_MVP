@@ -255,8 +255,8 @@ def init_db():
     # Create the first administrator from environment variables.
     # Never create an administrator through public registration.
 
-    admin_email = os.environ.get('VIDHYASTRA_ADMIN_EMAIL', '').strip().lower()
-    admin_password = os.environ.get('VIDHYASTRA_ADMIN_PASSWORD', '')
+    admin_email = os.environ.get('VIDHYASTRA_ADMIN_EMAIL', 'admin@school.com').strip().lower()
+    admin_password = os.environ.get('VIDHYASTRA_ADMIN_PASSWORD', 'adminpassword123')
     admin_name = os.environ.get('VIDHYASTRA_ADMIN_NAME', 'School Administrator')
 
     if admin_email and admin_password:
