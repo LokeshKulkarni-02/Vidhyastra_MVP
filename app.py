@@ -1367,7 +1367,7 @@ def assistant():
             for k, v in TOPIC_BANK.items()
         }
     )
-
+print("Hello")
 
 # --------------------------------------------------
 # SESSION AND HELP REQUESTS
