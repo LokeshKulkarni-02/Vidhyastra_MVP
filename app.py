@@ -139,13 +139,7 @@ def register():
               f.get('region','').strip(),f.get('district','').strip(),f.get('state','').strip(),f.get('board','').strip(),
               f.get('grade','').strip(),f.get('language','English'),roll,datetime.now().isoformat(timespec='seconds')))
             uid = cur.lastrowid
-            if role == 'student':
-                teacher_id = f.get('teacher_id')
-                subject = f.get('subject','Mathematics')
-                if teacher_id and teacher_id.isdigit():
-                    t = con.execute("SELECT id FROM users WHERE id=? AND role='teacher'", (int(teacher_id),)).fetchone()
-                    if t: con.execute('INSERT OR IGNORE INTO allocations(student_id,teacher_id,subject) VALUES(?,?,?)',(uid,int(teacher_id),subject))
-            elif role == 'parent':
+            if role == 'parent':
                 child_roll = f.get('child_roll','').strip().upper()
                 if child_roll:
                     child = con.execute("SELECT id FROM users WHERE roll_no=? AND role='student'",(child_roll,)).fetchone()
@@ -157,8 +151,7 @@ def register():
             con.rollback(); flash('That email is already registered. Please sign in instead.', 'error')
         finally: con.close()
         return redirect(url_for('register'))
-    con = db(); teachers = con.execute("SELECT id,name FROM users WHERE role='teacher' ORDER BY name").fetchall(); con.close()
-    return render_template('register.html', teachers=teachers)
+    return render_template('register.html')
 
 @app.route('/login', methods=['GET','POST'])
 def login():
@@ -279,24 +272,6 @@ def allocate():
         con.execute('INSERT INTO allocations(student_id,teacher_id,subject) VALUES(?,?,?) ON CONFLICT(student_id,subject) DO UPDATE SET teacher_id=excluded.teacher_id',(student['id'],session['user_id'],subject)); con.commit(); flash('Student allocation saved.', 'success')
     else: flash('Student roll number was not found. Check the roll number and try again.', 'error')
     con.close(); return redirect(url_for('dashboard'))
-
-
-@app.route('/choose-teacher', methods=['POST'])
-@role_required('student')
-def choose_teacher():
-    teacher_id=request.form.get('teacher_id',''); subject=request.form.get('subject','Mathematics')
-    if subject not in SUBJECTS: abort(400)
-    con=db()
-    teacher=con.execute("SELECT id FROM users WHERE id=? AND role='teacher'",(teacher_id,)).fetchone() if teacher_id.isdigit() else None
-    if not teacher:
-        con.close(); flash('Please choose a valid teacher account.', 'error'); return redirect(url_for('dashboard'))
-    con.execute('INSERT INTO allocations(student_id,teacher_id,subject) VALUES(?,?,?) ON CONFLICT(student_id,subject) DO UPDATE SET teacher_id=excluded.teacher_id',(session['user_id'],int(teacher_id),subject))
-    con.commit(); con.close(); flash(f'Teacher selected for {subject}.', 'success'); return redirect(url_for('dashboard'))
-
-@app.route('/api/teachers')
-def api_teachers():
-    con=db(); rows=con.execute("SELECT id,name FROM users WHERE role='teacher' ORDER BY name").fetchall(); con.close()
-    return jsonify([dict(r) for r in rows])
 
 @app.route('/report/<int:student_id>')
 @login_required
