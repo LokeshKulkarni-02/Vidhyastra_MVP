@@ -42,17 +42,15 @@ SUBJECTS = [
     'Telugu'
 ]
 
-<<<<<<< HEAD
 BASE_XP_PER_SUBJECT = 100
 CORRECT_ANSWER_XP = 20
-=======
+
 TICKET_STATUSES = [
     'Open',
     'In review',
     'Scheduled',
     'Closed'
 ]
->>>>>>> deca6052c356e1ac791765f213f24a3fbdd18797
 
 
 # --------------------------------------------------
@@ -216,39 +214,31 @@ def migrate_database(con):
     Upgrade an older single-school database without deleting user data.
     """
 
-<<<<<<< HEAD
-    CREATE TABLE IF NOT EXISTS student_xp (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        student_id INTEGER NOT NULL,
-        subject TEXT NOT NULL,
-        xp INTEGER DEFAULT 100,
-        UNIQUE(student_id, subject),
-        FOREIGN KEY(student_id) REFERENCES users(id)
-    );
-
-    ''')
-=======
     con.execute('PRAGMA foreign_keys = OFF')
     con.execute('BEGIN')
->>>>>>> deca6052c356e1ac791765f213f24a3fbdd18797
 
     try:
+        con.execute('''
+            CREATE TABLE IF NOT EXISTS student_xp (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id INTEGER NOT NULL,
+                subject TEXT NOT NULL,
+                xp INTEGER DEFAULT 100,
+                UNIQUE(student_id, subject),
+                FOREIGN KEY(student_id) REFERENCES users(id)
+            )
+        ''')
 
-<<<<<<< HEAD
-    # Ensure all existing students have base XP for all subjects
-    existing_students = con.execute("SELECT id FROM users WHERE role='student'").fetchall()
-    for s in existing_students:
-        for sub in SUBJECTS:
-            con.execute('''
-                INSERT INTO student_xp (student_id, subject, xp)
-                VALUES (?, ?, ?)
-                ON CONFLICT(student_id, subject) DO NOTHING
-            ''', (s['id'], sub, BASE_XP_PER_SUBJECT))
-    con.commit()
+        # Ensure all existing students have base XP for all subjects
+        existing_students = con.execute("SELECT id FROM users WHERE role='student'").fetchall()
+        for s in existing_students:
+            for sub in SUBJECTS:
+                con.execute('''
+                    INSERT INTO student_xp (student_id, subject, xp)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(student_id, subject) DO NOTHING
+                ''', (s['id'], sub, BASE_XP_PER_SUBJECT))
 
-    # Create the first administrator from environment variables.
-    # Never create an administrator through public registration.
-=======
         con.execute('''
             CREATE TABLE IF NOT EXISTS schools (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -258,7 +248,6 @@ def migrate_database(con):
                 created_at TEXT NOT NULL
             )
         ''')
->>>>>>> deca6052c356e1ac791765f213f24a3fbdd18797
 
         add_column_if_missing(
             con, 'users', 'school_id',
@@ -686,7 +675,7 @@ def current_user():
     finally:
         con.close()
 
-<<<<<<< HEAD
+
 # --------------------------------------------------
 # EXPERIENCE POINTS (XP) AND LEADERBOARD SYSTEM
 # --------------------------------------------------
@@ -735,18 +724,26 @@ def get_student_xp_summary(student_id, con):
     return xp_by_sub, total
 
 
-def get_class_leaderboard(grade, subject_filter='overall', current_student_id=None, con=None):
+def get_class_leaderboard(grade, subject_filter='overall', current_student_id=None, con=None, school_id=None):
     close_con = False
     if con is None:
         con = db()
         close_con = True
 
-    students = con.execute('''
-        SELECT id, name, roll_no, grade
-        FROM users
-        WHERE role = 'student' AND grade = ?
-        ORDER BY id
-    ''', (grade,)).fetchall()
+    if school_id:
+        students = con.execute('''
+            SELECT id, name, roll_no, grade
+            FROM users
+            WHERE role = 'student' AND grade = ? AND school_id = ?
+            ORDER BY id
+        ''', (grade, school_id)).fetchall()
+    else:
+        students = con.execute('''
+            SELECT id, name, roll_no, grade
+            FROM users
+            WHERE role = 'student' AND grade = ?
+            ORDER BY id
+        ''', (grade,)).fetchall()
 
     for s in students:
         ensure_student_xp(s['id'], con)
@@ -810,13 +807,6 @@ def get_class_leaderboard(grade, subject_filter='overall', current_student_id=No
         con.close()
 
     return leaderboard, current_entry, student_ahead, student_behind
-
-
-# --------------------------------------------------
-# AUTHENTICATION AND ROLE CHECKING
-# --------------------------------------------------
-=======
->>>>>>> deca6052c356e1ac791765f213f24a3fbdd18797
 
 def login_required(fn):
 
@@ -1040,115 +1030,13 @@ def register():
         user_id = cur.lastrowid
 
         if role == 'student':
-
-<<<<<<< HEAD
-            required_fields = [
-                'region',
-                'district',
-                'state',
-                'board',
-                'grade'
-            ]
-
-            if not all(f.get(k, '').strip() for k in required_fields):
-
-                flash(
-                    'Please select region, district, state, board and class.',
-                    'error'
-                )
-
-                return redirect(url_for('register'))
-
-        con = db()
-
-        try:
-
-            roll = None
-
-            if role == 'student':
-                roll = 'VDS-' + secrets.token_hex(3).upper()
-
-            cur = con.execute('''
-                INSERT INTO users
-                (
-                    name, email, phone, password_hash, role,
-                    region, district, state, board, grade,
-                    language, roll_no, created_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                name,
-                email,
-                phone,
-                generate_password_hash(password),
-                role,
-                f.get('region', '').strip(),
-                f.get('district', '').strip(),
-                f.get('state', '').strip(),
-                f.get('board', '').strip(),
-                f.get('grade', '').strip(),
-                f.get('language', 'English'),
-                roll,
-                datetime.now().isoformat(timespec='seconds')
-            ))
-
-            uid = cur.lastrowid
-
-            # Automatically assign the teachers selected by the school.
-            if role == 'student':
-
-                ensure_student_xp(uid, con)
-
-                assign_class_teachers(
-                    uid,
-                    f.get('grade', '').strip(),
-                    f.get('board', '').strip(),
-                    con
-                )
-
-            if role == 'parent':
-
-                child_roll = f.get('child_roll', '').strip().upper()
-
-                if child_roll:
-
-                    child = con.execute('''
-                        SELECT id FROM users
-                        WHERE roll_no=? AND role='student'
-                    ''', (child_roll,)).fetchone()
-
-                    if child:
-
-                        con.execute('''
-                            INSERT OR IGNORE INTO parent_links
-                            (parent_id, student_id)
-                            VALUES (?, ?)
-                        ''', (uid, child['id']))
-
-            con.commit()
-
-            session.clear()
-            session['user_id'] = uid
-
-            flash('Welcome to Vidhyastra! Your account is ready.', 'success')
-
-            return redirect(url_for('dashboard'))
-
-        except sqlite3.IntegrityError:
-
-            con.rollback()
-
-            flash(
-                'That email is already registered. Please sign in instead.',
-                'error'
-=======
+            ensure_student_xp(user_id, con)
             assign_class_teachers(
                 user_id,
                 school['id'],
                 form.get('grade', '').strip(),
                 form.get('board', '').strip(),
                 con
->>>>>>> deca6052c356e1ac791765f213f24a3fbdd18797
             )
 
         elif role == 'parent':
@@ -1299,147 +1187,8 @@ def dashboard():
     if not user:
         abort(403)
 
-<<<<<<< HEAD
-    # STUDENT DASHBOARD
-
-    if user['role'] == 'student':
-
-        lb_subject = request.args.get('lb_subject', 'overall')
-        if lb_subject != 'overall' and lb_subject not in SUBJECTS:
-            lb_subject = 'overall'
-
-        subject_xp, total_xp = get_student_xp_summary(user['id'], con)
-        leaderboard, my_lb_entry, student_ahead, student_behind = get_class_leaderboard(
-            user['grade'],
-            subject_filter=lb_subject,
-            current_student_id=user['id'],
-            con=con
-        )
-        my_rank = my_lb_entry['rank'] if my_lb_entry else 1
-
-        rows = con.execute('''
-            SELECT * FROM progress
-            WHERE student_id=?
-            ORDER BY subject, topic
-        ''', (user['id'],)).fetchall()
-
-        allocations = con.execute('''
-            SELECT
-                a.subject,
-                u.id AS teacher_id,
-                u.name AS teacher_name
-            FROM allocations a
-            JOIN users u ON u.id=a.teacher_id
-            WHERE a.student_id=?
-            ORDER BY a.subject
-        ''', (user['id'],)).fetchall()
-
-        attempts = con.execute('''
-            SELECT
-                COUNT(*) AS n,
-                COALESCE(SUM(is_correct), 0) AS correct
-            FROM quiz_attempts
-            WHERE student_id=?
-        ''', (user['id'],)).fetchone()
-
-        week_start = (
-            date.today() -
-            timedelta(days=date.today().weekday())
-        ).isoformat()
-
-        open_tickets = con.execute('''
-            SELECT COUNT(*) AS n
-            FROM tickets
-            WHERE student_id=?
-            AND kind='Student session'
-            AND substr(created_at, 1, 10) >= ?
-        ''', (user['id'], week_start)).fetchone()['n']
-
-        con.close()
-
-        return render_template(
-            'student_dashboard.html',
-            user=user,
-            rows=rows,
-            allocations=allocations,
-            attempts=attempts,
-            open_tickets=open_tickets,
-            subject_xp=subject_xp,
-            total_xp=total_xp,
-            leaderboard=leaderboard,
-            my_rank=my_rank,
-            student_ahead=student_ahead,
-            student_behind=student_behind,
-            lb_subject=lb_subject
-        )
-
-    # TEACHER DASHBOARD
-
-    if user['role'] == 'teacher':
-
-        students = con.execute('''
-            SELECT
-                u.*,
-                a.subject,
-                COALESCE(SUM(p.attempts), 0) AS attempts,
-                COALESCE(SUM(p.correct), 0) AS correct,
-                CASE
-                    WHEN COALESCE(SUM(p.attempts), 0)=0 THEN 0
-                    ELSE ROUND(
-                        100.0 * SUM(p.correct) / SUM(p.attempts)
-                    )
-                END AS accuracy
-            FROM allocations a
-            JOIN users u ON u.id=a.student_id
-            LEFT JOIN progress p
-                ON p.student_id=u.id AND p.subject=a.subject
-            WHERE a.teacher_id=?
-            GROUP BY u.id, a.subject
-            ORDER BY u.name
-        ''', (user['id'],)).fetchall()
-
-        tickets = con.execute("""
-    SELECT t.*, u.name AS student_name
-    FROM tickets t
-    LEFT JOIN users u ON u.id = t.student_id
-    WHERE t.teacher_id = ?
-    ORDER BY t.created_at DESC
-    LIMIT 30
-""", (user['id'],)).fetchall()
-
-        con.close()
-
-        return render_template(
-            'teacher_dashboard.html',
-            user=user,
-            students=students,
-            tickets=tickets
-        )
-
-    # PARENT DASHBOARD
-
-    if user['role'] == 'parent':
-
-        children = con.execute('''
-            SELECT u.*
-            FROM parent_links l
-            JOIN users u ON u.id=l.student_id
-            WHERE l.parent_id=?
-        ''', (user['id'],)).fetchall()
-
-        con.close()
-
-        return render_template(
-            'parent_dashboard.html',
-            user=user,
-            children=children
-        )
-
-    # ADMIN DASHBOARD
-=======
     if user['role'] == 'platform_admin':
         return redirect(url_for('platform_dashboard'))
->>>>>>> deca6052c356e1ac791765f213f24a3fbdd18797
 
     if user['role'] == 'admin':
         return redirect(url_for('admin_dashboard'))
@@ -1451,6 +1200,26 @@ def dashboard():
         # STUDENT DASHBOARD
 
         if user['role'] == 'student':
+
+            lb_subject = request.args.get('lb_subject', 'overall')
+            if lb_subject != 'overall' and lb_subject not in SUBJECTS:
+                lb_subject = 'overall'
+
+            subject_xp, total_xp = get_student_xp_summary(user['id'], con)
+            leaderboard, my_lb_entry, student_ahead, student_behind = get_class_leaderboard(
+                user['grade'],
+                subject_filter=lb_subject,
+                current_student_id=user['id'],
+                con=con,
+                school_id=user['school_id']
+            )
+            my_rank = my_lb_entry['rank'] if my_lb_entry else 1
+
+            # XP needed for #1
+            first_xp = leaderboard[0]['xp'] if leaderboard else 0
+            current_xp = total_xp if lb_subject == 'overall' else subject_xp.get(lb_subject, 100)
+            xp_to_first = max(0, first_xp - current_xp)
+            questions_to_first = (xp_to_first + 19) // 20  # Assuming 20 XP per question
 
             rows = con.execute('''
                 SELECT * FROM progress
@@ -1521,7 +1290,16 @@ def dashboard():
                 allocations=allocations,
                 attempts=attempts,
                 open_tickets=open_tickets,
-                ticket_history=ticket_history
+                ticket_history=ticket_history,
+                subject_xp=subject_xp,
+                total_xp=total_xp,
+                leaderboard=leaderboard,
+                my_rank=my_rank,
+                xp_to_first=xp_to_first,
+                questions_to_first=questions_to_first,
+                student_ahead=student_ahead,
+                student_behind=student_behind,
+                lb_subject=lb_subject
             )
 
         # TEACHER DASHBOARD
@@ -2232,11 +2010,15 @@ def report(student_id):
             date.today().strftime('%Y-%m')
         )).fetchone()
 
+        subject_xp, total_xp = get_student_xp_summary(student_id, con)
+
         return render_template(
             'report.html',
             student=student,
             progress=progress,
-            attempts=attempts
+            attempts=attempts,
+            subject_xp=subject_xp,
+            total_xp=total_xp
         )
 
     finally:
@@ -2315,39 +2097,6 @@ def quiz():
                 now
             ))
 
-<<<<<<< HEAD
-        xp_earned = 0
-        new_subject_xp = 0
-        new_total_xp = 0
-
-        if correct:
-            xp_earned, new_subject_xp, new_total_xp = award_quiz_xp(user['id'], subject, con)
-        else:
-            subj_xp_dict, new_total_xp = get_student_xp_summary(user['id'], con)
-            new_subject_xp = subj_xp_dict.get(subject, BASE_XP_PER_SUBJECT)
-
-        _, my_lb_entry, student_ahead, student_behind = get_class_leaderboard(
-            user['grade'],
-            subject_filter=subject,
-            current_student_id=user['id'],
-            con=con
-        )
-        my_rank = my_lb_entry['rank'] if my_lb_entry else 1
-
-        con.commit()
-        con.close()
-=======
-            row = con.execute('''
-                SELECT * FROM progress
-                WHERE student_id=?
-                AND subject=?
-                AND topic=?
-            ''', (
-                user['id'],
-                subject,
-                topic
-            )).fetchone()
-
             if row:
 
                 attempts_count = row['attempts'] + 1
@@ -2396,11 +2145,29 @@ def quiz():
                     now
                 ))
 
+            xp_earned = 0
+            new_subject_xp = 0
+            new_total_xp = 0
+
+            if correct:
+                xp_earned, new_subject_xp, new_total_xp = award_quiz_xp(user['id'], subject, con)
+            else:
+                subj_xp_dict, new_total_xp = get_student_xp_summary(user['id'], con)
+                new_subject_xp = subj_xp_dict.get(subject, BASE_XP_PER_SUBJECT)
+
+            _, my_lb_entry, student_ahead, student_behind = get_class_leaderboard(
+                user['grade'],
+                subject_filter=subject,
+                current_student_id=user['id'],
+                con=con,
+                school_id=user['school_id']
+            )
+            my_rank = my_lb_entry['rank'] if my_lb_entry else 1
+
             con.commit()
 
         finally:
             con.close()
->>>>>>> deca6052c356e1ac791765f213f24a3fbdd18797
 
         return render_template(
             'quiz_result.html',
@@ -2717,47 +2484,6 @@ def update_ticket(ticket_id):
     finally:
         con.close()
 
-<<<<<<< HEAD
-        abort(403)
-
-    student = con.execute(
-        'SELECT * FROM users WHERE id=?',
-        (student_id,)
-    ).fetchone()
-
-    progress = con.execute('''
-        SELECT * FROM progress
-        WHERE student_id=?
-        ORDER BY subject, topic
-    ''', (student_id,)).fetchall()
-
-    attempts = con.execute('''
-        SELECT
-            COUNT(*) AS n,
-            COALESCE(SUM(is_correct), 0) AS correct
-        FROM quiz_attempts
-        WHERE student_id=?
-        AND substr(created_at, 1, 7)=?
-    ''', (
-        student_id,
-        date.today().strftime('%Y-%m')
-    )).fetchone()
-
-    subject_xp, total_xp = get_student_xp_summary(student_id, con)
-
-    con.close()
-
-    return render_template(
-        'report.html',
-        student=student,
-        progress=progress,
-        attempts=attempts,
-        subject_xp=subject_xp,
-        total_xp=total_xp
-    )
-
-=======
->>>>>>> deca6052c356e1ac791765f213f24a3fbdd18797
 
 # --------------------------------------------------
 # PWA AND ERROR HANDLERS
