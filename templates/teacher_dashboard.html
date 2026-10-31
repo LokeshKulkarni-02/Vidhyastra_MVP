@@ -1,6 +1,5 @@
 
 {% extends 'base.html' %}
-
 {% block title %}Teacher dashboard · Vidhyastra{% endblock %}
 
 {% block content %}
@@ -8,21 +7,52 @@
 <section class="dashboard-head">
     <div>
         <span class="eyebrow">TEACHER WORKSPACE</span>
-
         <h1>Welcome, {{ user['name'].split(' ')[0] }}.</h1>
-
         <p>Turn learning signals into helpful next steps. Students stay at the centre.</p>
     </div>
 
     <div class="roll-card teacher-card">
         <small>YOUR TEACHING SPACE</small>
         <strong>{{ students|length }} allocations</strong>
-        <span>Grouped by current learning signal</span>
+        <span>For the selected class and subject</span>
     </div>
 </section>
 
+<section class="panel">
+    <h2>Filter your classes</h2>
 
-<!-- TEACHER STATISTICS -->
+    <form method="get" class="inline-form">
+
+        <select name="grade">
+            <option value="">All assigned classes</option>
+
+            {% for g in grades %}
+            <option value="{{ g }}" {% if selected_grade==g %}selected{% endif %}>
+                {{ g }}
+            </option>
+            {% endfor %}
+        </select>
+
+        <select name="subject">
+            <option value="">All assigned subjects</option>
+
+            {% for s in teacher_subjects %}
+            <option value="{{ s }}" {% if selected_subject==s %}selected{% endif %}>
+                {{ s }}
+            </option>
+            {% endfor %}
+        </select>
+
+        <button class="button primary" type="submit">
+            Apply filters
+        </button>
+
+        <a class="button secondary" href="{{ url_for('dashboard') }}">
+            Clear
+        </a>
+
+    </form>
+</section>
 
 <section class="stats-grid">
 
@@ -30,51 +60,41 @@
         <span class="stat-icon purple">◎</span>
         <small>Allocated student-subjects</small>
         <strong>{{ students|length }}</strong>
-        <span class="muted">Across your assigned subjects</span>
+        <span class="muted">In the current view</span>
     </article>
 
     <article class="stat-card">
         <span class="stat-icon green">↗</span>
         <small>Fast pace · A</small>
         <strong>{{ students|selectattr('accuracy', 'ge', 80)|list|length }}</strong>
-        <span class="muted">Strong recent accuracy</span>
+        <span class="muted">80%+ recent accuracy</span>
     </article>
 
     <article class="stat-card">
         <span class="stat-icon orange">⌁</span>
         <small>Needs review · C</small>
         <strong>{{ students|selectattr('accuracy', 'lt', 50)|list|length }}</strong>
-        <span class="muted">Review evidence and offer support</span>
+        <span class="muted">Below 50% or no evidence</span>
     </article>
 
 </section>
 
-
-<!-- STUDENT TRACKING -->
-
 <section class="section-head">
     <div>
         <span class="eyebrow">STUDENT TRACKING</span>
-
         <h2>Your students, grouped by signal</h2>
-
         <p class="muted">
-            A/B/C are provisional performance signals,
-            not labels of a student's ability.
+            A/B/C are provisional performance signals, not labels of a student's ability.
         </p>
     </div>
 </section>
 
-
 <div class="level-grid">
-
-    <!-- CATEGORY A -->
 
     <section class="level-card level-a">
 
         <div class="level-title">
             <span>A</span>
-
             <div>
                 <h3>Fast / ready to extend</h3>
                 <small>80%+ recent accuracy</small>
@@ -84,17 +104,9 @@
         {% for s in students if s.accuracy >= 80 %}
 
         <div class="student-mini">
-
             <b>{{ s.name }}</b>
-
-            <small>
-                {{ s.subject }} · {{ s.accuracy }}% accuracy
-            </small>
-
-            <a href="{{ url_for('report', student_id=s.id) }}">
-                View ↗
-            </a>
-
+            <small>{{ s.grade }} · {{ s.subject }} · {{ s.accuracy }}%</small>
+            <a href="{{ url_for('report', student_id=s.id) }}">View ↗</a>
         </div>
 
         {% else %}
@@ -105,14 +117,10 @@
 
     </section>
 
-
-    <!-- CATEGORY B -->
-
     <section class="level-card level-b">
 
         <div class="level-title">
             <span>B</span>
-
             <div>
                 <h3>Building confidence</h3>
                 <small>50–79% recent accuracy</small>
@@ -122,17 +130,9 @@
         {% for s in students if s.accuracy >= 50 and s.accuracy < 80 %}
 
         <div class="student-mini">
-
             <b>{{ s.name }}</b>
-
-            <small>
-                {{ s.subject }} · {{ s.accuracy }}% accuracy
-            </small>
-
-            <a href="{{ url_for('report', student_id=s.id) }}">
-                View ↗
-            </a>
-
+            <small>{{ s.grade }} · {{ s.subject }} · {{ s.accuracy }}%</small>
+            <a href="{{ url_for('report', student_id=s.id) }}">View ↗</a>
         </div>
 
         {% else %}
@@ -143,14 +143,10 @@
 
     </section>
 
-
-    <!-- CATEGORY C -->
-
     <section class="level-card level-c">
 
         <div class="level-title">
             <span>C</span>
-
             <div>
                 <h3>Needs adaptation</h3>
                 <small>Below 50% or no evidence</small>
@@ -160,17 +156,9 @@
         {% for s in students if s.accuracy < 50 %}
 
         <div class="student-mini">
-
             <b>{{ s.name }}</b>
-
-            <small>
-                {{ s.subject }} · {{ s.accuracy }}% accuracy
-            </small>
-
-            <a href="{{ url_for('report', student_id=s.id) }}">
-                View ↗
-            </a>
-
+            <small>{{ s.grade }} · {{ s.subject }} · {{ s.accuracy }}%</small>
+            <a href="{{ url_for('report', student_id=s.id) }}">View ↗</a>
         </div>
 
         {% else %}
@@ -183,16 +171,12 @@
 
 </div>
 
-
-<!-- SUPPORT REQUESTS -->
-
 <section class="section-head">
     <div>
         <span class="eyebrow">SUPPORT REQUESTS</span>
         <h2>Tickets and meeting requests</h2>
     </div>
 </section>
-
 
 <div class="panel">
 
@@ -203,42 +187,30 @@
         <div class="ticket-row">
 
             <div>
-
-                <b>{{ t.kind }}</b>
+                <b>
+                    {{ t.kind }}
+                    {% if t.subject %} · {{ t.subject }}{% endif %}
+                </b>
 
                 <small>
                     {{ t.student_name or 'Parent / student' }}
-                    · {{ t.created_at[:16].replace('T', ' ') }}
+                    · {{ t.created_at[:16].replace('T',' ') }}
                 </small>
 
                 <p>{{ t.message }}</p>
-
             </div>
 
-            <form method="post"
-                  action="{{ url_for('update_ticket', ticket_id=t.id) }}">
+            <form method="post" action="{{ url_for('update_ticket', ticket_id=t.id) }}">
 
                 <select name="status">
 
-                    <option value="Open"
-                        {% if t.status == 'Open' %}selected{% endif %}>
-                        Open
+                    {% for status in ['Open','In review','Scheduled','Closed'] %}
+
+                    <option value="{{ status }}" {% if t.status==status %}selected{% endif %}>
+                        {{ status }}
                     </option>
 
-                    <option value="In review"
-                        {% if t.status == 'In review' %}selected{% endif %}>
-                        In review
-                    </option>
-
-                    <option value="Scheduled"
-                        {% if t.status == 'Scheduled' %}selected{% endif %}>
-                        Scheduled
-                    </option>
-
-                    <option value="Closed"
-                        {% if t.status == 'Closed' %}selected{% endif %}>
-                        Closed
-                    </option>
+                    {% endfor %}
 
                 </select>
 
@@ -254,7 +226,7 @@
 
     {% else %}
 
-        <p class="muted">No requests yet.</p>
+        <p class="muted">No requests assigned to you yet.</p>
 
     {% endif %}
 
