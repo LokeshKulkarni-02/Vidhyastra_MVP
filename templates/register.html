@@ -1,1 +1,117 @@
-{% extends 'base.html' %}{% block title %}Create account · Vidhyastra{% endblock %}{% block content %}<section class="form-page"><div class="page-heading"><span class="eyebrow">GET STARTED</span><h1>Build your learning space.</h1><p>Choose your role. Student curriculum details help us organize the learning journey.</p></div><form class="form-card wide" method="post"><div class="form-grid"><label>Full name<input name="name" required maxlength="100" autocomplete="name"></label><label>Email address<input name="email" type="email" required autocomplete="email"></label><label>Mobile number<input name="phone" type="tel" required maxlength="20" autocomplete="tel"></label><label>Password<input name="password" type="password" minlength="8" required autocomplete="new-password"><small>At least 8 characters.</small></label><label>Account type<select name="role" id="role" required><option value="student">Student</option><option value="teacher">Teacher</option><option value="parent">Parent / guardian</option></select></label><label>Preferred language<select name="language"><option>English</option><option>Hindi</option><option>Telugu</option><option>Urdu</option><option>Tamil</option><option>Kannada</option><option>Marathi</option><option>Bengali</option></select></label></div><div id="student-fields"><div class="section-divider"><span>Student curriculum details</span><small>Required for student accounts</small></div><div class="form-grid"><label>Region<input name="region" placeholder="e.g. South India"></label><label>District<input name="district" placeholder="Your district"></label><label>State / UT<input name="state" placeholder="e.g. Telangana"></label><label>Board of education<select name="board"><option value="">Select board</option><option>CBSE</option><option>ICSE</option><option>State Board</option><option>IB</option><option>Cambridge</option><option>Other</option></select></label><label>Class<select name="grade"><option value="">Select class</option>{% for g in range(6,11) %}<option>Class {{ g }}</option>{% endfor %}</select></label><label>Choose a teacher (optional)<select name="teacher_id"><option value="">Choose later</option>{% for t in teachers %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}</select></label><label>Subject for teacher allocation<select name="subject">{% for s in subjects %}<option>{{ s }}</option>{% endfor %}</select></label></div></div><div id="parent-fields" class="hidden"><label>Student roll number (optional)<input name="child_roll" placeholder="e.g. VDS-A1B2C3"><small>You can link your child's account later if you don't have the roll number yet.</small></label></div><p class="notice">A unique Vidhyastra roll number is created for student accounts. This prototype uses demo syllabus content; full board-wise syllabus data must be added before launch.</p><button class="button primary full" type="submit">Create account ↗</button><p class="form-foot">Already registered? <a href="{{ url_for('login') }}">Sign in</a></p></form></section>{% endblock %}
+
+{% extends 'base.html' %}
+{% block title %}Create account · Vidhyastra{% endblock %}
+
+{% block content %}
+<section class="form-page">
+    <div class="page-heading">
+        <span class="eyebrow">GET STARTED</span>
+        <h1>Build your learning space.</h1>
+        <p>Choose your role. Student curriculum details help us organize the learning journey.</p>
+    </div>
+
+    <form class="form-card wide" method="post">
+        <div class="form-grid">
+            <label>Full name
+                <input name="name" required maxlength="100" autocomplete="name">
+            </label>
+
+            <label>Email address
+                <input name="email" type="email" required autocomplete="email">
+            </label>
+
+            <label>Mobile number
+                <input name="phone" type="tel" required maxlength="20" autocomplete="tel">
+            </label>
+
+            <label>Password
+                <input name="password" type="password" minlength="8" required autocomplete="new-password">
+                <small>At least 8 characters.</small>
+            </label>
+
+            <label>Account type
+                <select name="role" id="role" required>
+                    <option value="student">Student</option>
+                    <option value="teacher">Teacher</option>
+                    <option value="parent">Parent / guardian</option>
+                </select>
+            </label>
+
+            <label>Preferred language
+                <select name="language">
+                    <option>English</option>
+                    <option>Hindi</option>
+                    <option>Telugu</option>
+                    <option>Urdu</option>
+                    <option>Tamil</option>
+                    <option>Kannada</option>
+                    <option>Marathi</option>
+                    <option>Bengali</option>
+                </select>
+            </label>
+        </div>
+
+        <div id="student-fields">
+            <div class="section-divider">
+                <span>Student curriculum details</span>
+                <small>Required for student accounts</small>
+            </div>
+
+            <div class="form-grid">
+                <label>Region
+                    <input name="region" placeholder="e.g. South India">
+                </label>
+
+                <label>District
+                    <input name="district" placeholder="Your district">
+                </label>
+
+                <label>State / UT
+                    <input name="state" placeholder="e.g. Telangana">
+                </label>
+
+                <label>Board of education
+                    <select name="board">
+                        <option value="">Select board</option>
+                        <option>CBSE</option>
+                        <option>ICSE</option>
+                        <option>State Board</option>
+                        <option>IB</option>
+                        <option>Cambridge</option>
+                        <option>Other</option>
+                    </select>
+                </label>
+
+                <label>Class
+                    <select name="grade">
+                        <option value="">Select class</option>
+                        {% for g in range(6,11) %}
+                        <option>Class {{ g }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+            </div>
+        </div>
+
+        <div id="parent-fields" class="hidden">
+            <label>Student roll number (optional)
+                <input name="child_roll" placeholder="e.g. VDS-A1B2C3">
+                <small>You can link your child's account later if you don't have the roll number yet.</small>
+            </label>
+        </div>
+
+        <p class="notice">
+            A unique Vidhyastra roll number is created for student accounts.
+            This prototype uses demo syllabus content; full board-wise syllabus data must be added before launch.
+        </p>
+
+        <button class="button primary full" type="submit">
+            Create account ↗
+        </button>
+
+        <p class="form-foot">
+            Already registered? <a href="{{ url_for('login') }}">Sign in</a>
+        </p>
+    </form>
+</section>
+{% endblock %}
