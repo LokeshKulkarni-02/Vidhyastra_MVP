@@ -174,36 +174,27 @@
 
     {% endif %}
 
-    <form class="inline-form"
-          method="post"
-          action="{{ url_for('create_ticket') }}">
+    <form class="inline-form" method="post"
+      action="{{ url_for('create_ticket') }}">
 
-        <input type="hidden" name="kind" value="Student session">
+    <input type="hidden" name="kind" value="Student session">
 
-        <input
-            name="message"
-            placeholder="What would you like help with?"
-            required
-        >
+    <input name="message"
+           placeholder="What would you like help with?"
+           required>
 
-        <select name="subject" required>
-            <option value="">Select subject</option>
+    <select name="subject" required>
+        <option value="">Select subject</option>
 
-            {% for a in allocations %}
+        {% for a in allocations %}
+        <option value="{{ a.subject }}">{{ a.subject }}</option>
+        {% endfor %}
+    </select>
 
-            <option value="{{ a.subject }}">
-                {{ a.subject }}
-            </option>
-
-            {% endfor %}
-
-        </select>
-
-        <button class="button primary" type="submit">
-            Request 1:1 session
-        </button>
-
-    </form>
+    <button class="button primary" type="submit">
+        Request 1:1 session
+    </button>
+</form>
 
     <small class="muted">
         Session-request limits and scheduling are demo behavior;

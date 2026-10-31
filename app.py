@@ -1,4 +1,3 @@
-
 import os
 import sqlite3
 import secrets
@@ -679,16 +678,14 @@ def dashboard():
             ORDER BY u.name
         ''', (user['id'],)).fetchall()
 
-        tickets = con.execute('''
-            SELECT
-                t.*,
-                u.name AS student_name
-            FROM tickets t
-            LEFT JOIN users u ON u.id=t.student_id
-            WHERE t.teacher_id=?
-            ORDER BY t.created_at DESC
-            LIMIT 30
-        ''', (user['id'],)).fetchall()
+        tickets = con.execute("""
+    SELECT t.*, u.name AS student_name
+    FROM tickets t
+    LEFT JOIN users u ON u.id = t.student_id
+    WHERE t.teacher_id = ?
+    ORDER BY t.created_at DESC
+    LIMIT 30
+""", (user['id'],)).fetchall()
 
         con.close()
 
@@ -1379,123 +1376,89 @@ def assistant():
 @app.route('/ticket', methods=['POST'])
 @login_required
 def create_ticket():
-
     user = current_user()
-
+    kind = request.form.get('kind', 'Student session')
     message = request.form.get('message', '').strip()
 
     if not message:
-
         flash('Please add a short message.', 'error')
-
         return redirect(url_for('dashboard'))
 
     con = db()
 
-    now = datetime.now().isoformat(timespec='seconds')
-
     if user['role'] == 'student':
-
-        kind = 'Student session'
-
         subject = request.form.get('subject', '').strip()
 
-        if subject not in SUBJECTS:
-
-            con.close()
-
-            flash('Please select a valid subject.', 'error')
-
-            return redirect(url_for('dashboard'))
-
-        # Find the teacher assigned by the school.
-        # Never accept teacher_id directly from the student.
-
-        allocation = con.execute('''
+        allocation = con.execute("""
             SELECT teacher_id
             FROM allocations
-            WHERE student_id=? AND subject=?
-        ''', (user['id'], subject)).fetchone()
+            WHERE student_id = ? AND subject = ?
+        """, (user['id'], subject)).fetchone()
 
         if not allocation:
-
             con.close()
-
-            flash(
-                'No teacher has been assigned for this subject yet. Please contact your school administrator.',
-                'error'
-            )
-
+            flash('No teacher is allocated for this subject yet.', 'error')
             return redirect(url_for('dashboard'))
 
         week_start = (
-            date.today() -
-            timedelta(days=date.today().weekday())
+            date.today() - timedelta(days=date.today().weekday())
         ).isoformat()
 
-        used = con.execute('''
-            SELECT COUNT(*) AS n
+        used = con.execute("""
+            SELECT COUNT(*) n
             FROM tickets
-            WHERE student_id=?
-            AND kind='Student session'
+            WHERE student_id = ?
+            AND kind = 'Student session'
             AND substr(created_at, 1, 10) >= ?
-        ''', (user['id'], week_start)).fetchone()['n']
+        """, (user['id'], week_start)).fetchone()['n']
 
-        if used >= 2:
-
+        if kind == 'Student session' and used >= 2:
             con.close()
-
-            flash(
-                'You have used your two student-session requests for this week.',
-                'error'
-            )
-
+            flash('You have used your two student-session requests for this week.', 'error')
             return redirect(url_for('dashboard'))
 
-        con.execute('''
+        teacher_id = allocation['teacher_id']
+
+        con.execute("""
             INSERT INTO tickets
             (student_id, teacher_id, kind, message, created_at)
             VALUES (?, ?, ?, ?, ?)
-        ''', (
+        """, (
             user['id'],
-            allocation['teacher_id'],
+            teacher_id,
             kind,
-            f'[{subject}] {message}',
-            now
+            message,
+            datetime.now().isoformat(timespec='seconds')
         ))
 
     elif user['role'] == 'parent':
-
-        child = con.execute('''
+        child = con.execute("""
             SELECT student_id
             FROM parent_links
-            WHERE parent_id=?
+            WHERE parent_id = ?
             LIMIT 1
-        ''', (user['id'],)).fetchone()
+        """, (user['id'],)).fetchone()
 
-        con.execute('''
+        con.execute("""
             INSERT INTO tickets
             (parent_id, student_id, kind, message, created_at)
             VALUES (?, ?, ?, ?, ?)
-        ''', (
+        """, (
             user['id'],
             child['student_id'] if child else None,
             'Parent-teacher meeting',
             message,
-            now
+            datetime.now().isoformat(timespec='seconds')
         ))
 
     else:
-
         con.close()
-
         abort(403)
 
     con.commit()
     con.close()
 
-    flash('Request submitted successfully.', 'success')
-
+    flash('Request submitted.', 'success')
     return redirect(url_for('dashboard'))
 
 
@@ -1506,41 +1469,34 @@ def create_ticket():
 @app.route('/ticket/<int:ticket_id>/status', methods=['POST'])
 @role_required('teacher')
 def update_ticket(ticket_id):
-
+    allowed_statuses = ['Open', 'In review', 'Scheduled', 'Closed']
     status = request.form.get('status', 'In review')
-
-    allowed_statuses = [
-        'Open',
-        'In review',
-        'Resolved',
-        'Closed'
-    ]
 
     if status not in allowed_statuses:
         abort(400)
 
     con = db()
 
-    cur = con.execute('''
+    ticket = con.execute("""
+        SELECT id FROM tickets
+        WHERE id = ? AND teacher_id = ?
+    """, (ticket_id, session['user_id'])).fetchone()
+
+    if not ticket:
+        con.close()
+        abort(403)
+
+    con.execute("""
         UPDATE tickets
-        SET status=?
-        WHERE id=? AND teacher_id=?
-    ''', (
-        status,
-        ticket_id,
-        session['user_id']
-    ))
+        SET status = ?
+        WHERE id = ? AND teacher_id = ?
+    """, (status, ticket_id, session['user_id']))
 
     con.commit()
     con.close()
 
-    if cur.rowcount == 0:
-        abort(404)
-
     flash('Ticket status updated.', 'success')
-
     return redirect(url_for('dashboard'))
-
 
 # --------------------------------------------------
 # REPORT
