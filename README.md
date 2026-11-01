@@ -1,163 +1,202 @@
-# Vidhyastra
+# 🚀 VIDHYASTRA -- Adaptive Learning Platform
 
-Vidhyastra is a Flask and SQLite learning platform with student, parent, teacher, school administrator and platform administrator roles.
+## 👨‍💻 JUDGES: START HERE
 
-The application includes:
-- Class-based curriculum navigation
-- Mathematics and Science chapter assessments
-- Quiz scoring and progress tracking
-- XP and leaderboards
-- School and user administration
-- Role-based dashboards
-- Parent and teacher support workflows
+**Main application file: `app.py`**
 
-## NCERT Mathematics and Science Quiz Coverage
+To run the Vidhyastra website:
 
-Each chapter assessment contains exactly 20 questions:
-- 8 easy
-- 8 medium
-- 4 hard
-
-| Class | Mathematics | Science | Total assessments | Questions |
-|---|---:|---:|---:|---:|
-| Class 6 | 10 | 12 | 22 | 440 |
-| Class 7 | 8 | 12 | 20 | 400 |
-| Class 8 | 14 | 13 | 27 | 540 |
-| Class 9 | 14 | 13 | 27 | 540 |
-| Class 10 | 14 | 13 | 27 | 540 |
-| **Total** | **60** | **63** | **123** | **2,460** |
-
-Two additional Class 8 Mathematics practice drills are preserved:
-- Square Numbers — 20 questions
-- Cubic Numbers — 20 questions
-
-The loaded question bank therefore contains 2,500 question records across 125 groups, assuming all configured question-bank files are present.
-
-The catalogue is identified in the code as `NCERT-2026-27-MATHS-SCIENCE-1.0`.
-
-**Curriculum note:** These chapter counts describe the repository's current catalogue. Schools should compare the content with the exact NCERT/CBSE textbook edition and academic-year syllabus they use. Other boards and state-specific curricula may differ.
-
-Structural tests validate question formats, answer membership, unique IDs, question counts and difficulty distribution. They do not independently prove that every answer and explanation is factually correct. Subject-matter review is recommended before formal student assessments.
-
-## Main Project Files
-
-| File or folder | Purpose |
-|---|---|
-| `app.py` | Flask application, routes, login, database initialization and role-based workflows |
-| `curriculum_catalog.py` | Curriculum chapter catalogue |
-| `ncert_quiz_catalog.py` | NCERT Mathematics and Science chapter catalogue |
-| `mvp_curriculum.py` | Curriculum integration used by the application |
-| `question_bank.py` | Loads and validates question banks |
-| `question_bank.json` | Original question bank |
-| `question_banks/` | Additional question-bank data |
-| `class6_content.py` | Preserved Class 6 practice content |
-| `class8_content.py` | Preserved Class 8 Mathematics topic drills |
-| `templates/` | HTML templates |
-| `static/` | CSS, JavaScript and service-worker files |
-| `tests/` | Automated tests |
-| `verify_all_quizzes.py` | Checks practice-ready curriculum coverage |
-| `verify_ncert_quiz_expansion.py` | Checks the expanded NCERT quiz integration |
-| `set_platform_admin.py` | Manual Platform Admin account recovery utility |
-
-## Requirements
-
-- Python 3.10 or newer
-- Dependencies listed in `requirements.txt`
-
-## Local Setup
-
-Create a virtual environment from the repository root:
-
-```bash
-python -m venv .venv
-```
-
-Activate it.
-
-**Windows PowerShell:**
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-**macOS or Linux:**
-
-```bash
-source .venv/bin/activate
-```
-
-Install the dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-## Run the Application Locally
-
-Run:
-
-```bash
+``` bash
 python app.py
 ```
 
-The application initializes its SQLite database when `app.py` is imported or started.
+Then open your browser and visit:
 
-Use a production WSGI server and HTTPS for public deployment. Flask's built-in development server is intended for local development, not public production hosting.
+<http://127.0.0.1:5000/>
 
-## Security Configuration
+**Technology:** Python, Flask, SQLite, HTML, CSS and JavaScript.
 
-The current `app.py` includes security configuration. **Do not run `apply_security_fix.py`.** That script was written for an older version of the application and is not required by the current code.
+Please refer to the sections below for project details, features and
+setup instructions.
 
-The application supports these environment variables:
+------------------------------------------------------------------------
 
-| Variable | Purpose |
-|---|---|
-| `VIDHYASTRA_ENV` | Set to `production` on the production host |
-| `VIDHYASTRA_SECRET` | Strong Flask session secret |
-| `VIDHYASTRA_DEBUG` | Enables debug mode only when explicitly requested |
-| `VIDHYASTRA_HTTPS` | Enables secure session cookies when set to `1` |
+## 1. Project Overview
 
-For production, configure:
+Vidhyastra is a web-based learning and quiz platform designed to help
+students access curriculum content, practise questions, attempt quizzes
+and review their performance through a student-friendly interface.
 
-```text
-VIDHYASTRA_ENV=production
-VIDHYASTRA_DEBUG=0
-VIDHYASTRA_HTTPS=1
-VIDHYASTRA_SECRET=<your-strong-secret>
+The application combines a browser-based frontend, a Python Flask
+backend, question-bank modules and a database to support the learning
+workflow.
+
+## 2. How the Website Works
+
+Vidhyastra follows a client-server structure:
+
+1.  A student opens the website in a browser.
+2.  HTML templates define the page structure and forms. CSS controls the
+    appearance and layout. JavaScript supports browser-side interactions
+    where used.
+3.  The browser sends page requests and form submissions to the Flask
+    application.
+4.  Python code in `app.py` handles application routes and connects the
+    website pages to the relevant curriculum, quiz and account
+    functions.
+5.  Curriculum modules organise available grade, subject and chapter
+    information.
+6.  Question-bank modules provide the quiz questions used by the
+    application.
+7.  SQLite stores application records used by the website.
+8.  Flask returns the requested page or quiz result to the browser.
+
+**Basic flow:** Student → Browser interface → Flask (`app.py`) →
+Curriculum and question-bank modules → Database (when needed) → Response
+displayed in the browser.
+
+## 3. Technologies Used
+
+  -----------------------------------------------------------------------
+  Technology                          Purpose
+  ----------------------------------- -----------------------------------
+  Python                              Main programming language for
+                                      application logic
+
+  Flask                               Web framework that handles routes
+                                      and connects the frontend with
+                                      Python code
+
+  HTML                                Defines the structure of website
+                                      pages
+
+  CSS                                 Styles the pages, layouts, colours
+                                      and visual elements
+
+  JavaScript                          Supports interactive behaviour in
+                                      the browser
+
+  SQLite                              Lightweight database used for
+                                      application data
+
+  JSON                                Stores structured question-bank
+                                      data
+  -----------------------------------------------------------------------
+
+## 4. Important Project Files
+
+  -----------------------------------------------------------------------
+  File or folder                      Purpose
+  ----------------------------------- -----------------------------------
+  `app.py`                            Main Flask application and starting
+                                      point of the website
+
+  `templates/`                        HTML templates used to display
+                                      website pages
+
+  `static/`                           Static assets such as CSS,
+                                      JavaScript and images
+
+  `question_bank.py`                  Loads and provides question-bank
+                                      data to the application
+
+  `question_bank.json`                Structured quiz question data
+
+  `curriculum_catalog.py`             Curriculum and chapter information
+
+  `class6_content.py`                 Class 6 question content
+
+  `class6_quiz.py`                    Class 6 quiz-related functionality
+
+  `class8_content.py`                 Class 8 question content
+
+  `vidhyastra.db`                     SQLite database used by the
+                                      application
+  -----------------------------------------------------------------------
+
+The repository may also contain helper scripts, backup files and tests.
+The files above are the main files relevant to understanding and running
+the website.
+
+## 5. Main Website Features
+
+-   Student registration and login.
+-   Student dashboard and profile pages.
+-   Curriculum browsing by class, subject and chapter, where configured.
+-   Quiz screens for attempting available practice questions.
+-   Answer evaluation and quiz-result display.
+-   Progress and performance information shown in the student interface.
+-   Separate curriculum and question-content modules to keep learning
+    content organised.
+
+The subjects, chapters and quiz availability depend on the content
+configured in the project.
+
+## 6. How to Install and Run
+
+### Requirements
+
+-   Python 3.
+-   The Vidhyastra project files.
+-   The packages listed in `requirements.txt`.
+
+### Install dependencies
+
+Open a terminal in the project folder and run:
+
+``` bash
+python -m pip install -r requirements.txt
 ```
 
-Generate a strong secret locally with:
+### Start the application
 
-```bash
-python -c "import secrets; print(secrets.token_urlsafe(48))"
+From the same project folder, run:
+
+``` bash
+python app.py
 ```
 
-Copy the generated value into your hosting provider's environment-variable or secret settings.
+Keep the terminal open while using the website. When Flask starts
+successfully, open:
 
-Important:
-- Production startup requires `VIDHYASTRA_SECRET`.
-- The secret must contain at least 32 characters.
-- Never commit a real secret key to GitHub.
-- Never publish production database files or backups.
-- Debug mode must remain disabled in production.
+<http://127.0.0.1:5000/>
 
-When no secret is configured in development mode, the app generates a temporary random secret. Existing sessions will be invalidated when the application restarts.
+To stop the local server, return to the terminal and press `Ctrl + C`.
 
-## Platform Administrator Account
+**Important:** `127.0.0.1` is a local development address. It works on
+the computer running the Flask application and is not a public website
+link. Judges using another computer will need a publicly deployed URL to
+access the website.
 
-The current application automatically creates a shared Platform Admin demo account during database initialization.
+## 7. Project Structure
 
-**Public hackathon demonstration credentials:**
-
-```text
-Username: platform.admin@vidhyastra.demo
-Password: VidhyastraDemo@2026
+``` text
+Vidhyastra_MVP/
+├── app.py
+├── requirements.txt
+├── question_bank.py
+├── question_bank.json
+├── curriculum_catalog.py
+├── class6_content.py
+├── class6_quiz.py
+├── class8_content.py
+├── templates/
+├── static/
+└── vidhyastra.db
 ```
 
-To sign in:
-1. Open the Vidhyastra login page.
-2. Enter the username in the existing Email address field.
-3. Enter the password.
-4. Sign in.
+Some files may be added or updated as the project develops.
 
-A successful Platform Admin login redirects to the Platform Admin dashboard at `/platform`.
+## 8. Project Purpose
+
+Vidhyastra aims to make learning practice and revision easier to access
+through a single student-focused website. Its modular structure
+separates the web application, page templates, curriculum information,
+question content and stored application data.
+
+------------------------------------------------------------------------
+
+**Project:** Vidhyastra -- Adaptive Learning Platform\
+**Main application file:** `app.py`\
+**GitHub repository:**
+[Vidhyastra_MVP](https://github.com/LokeshKulkarni-02/Vidhyastra_MVP)
