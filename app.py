@@ -1070,13 +1070,15 @@ def register():
             flash('Choose a class from Class 6 to Class 10.', 'error')
             return redirect(url_for('register'))
 
-        # R3 is enabled only for Classes 6-8 when R2 is Hindi.
-        if 6 <= class_no <= 8 and second_language == 'Hindi' and not third_language:
-            third_language = default_r3_for_student(
-                grade_value, first_language, second_language
-            )
+        # Classes 6-8 require the R3 option defined by the selected R2.
+        if 6 <= class_no <= 8:
+            allowed_r3 = get_r3_options(first_language, second_language)
+            if not third_language:
+                third_language = get_default_r3(
+                    first_language, second_language
+                )
         else:
-            third_language = '' if not (6 <= class_no <= 8 and second_language == 'Hindi') else third_language
+            third_language = ''
 
         valid_languages, language_error = validate_language_selection(
             grade_value, first_language, second_language, third_language
@@ -1994,12 +1996,14 @@ def profile():
             ):
                 class_no = grade_number(user['grade'])
 
-                if 6 <= class_no <= 8 and second_language == 'Hindi' and not third_language:
-                    third_language = default_r3_for_student(
-                        user['grade'], first_language, second_language
-                    )
+                if 6 <= class_no <= 8:
+                    allowed_r3 = get_r3_options(first_language, second_language)
+                    if not third_language:
+                        third_language = get_default_r3(
+                            first_language, second_language
+                        )
                 else:
-                    third_language = '' if not (6 <= class_no <= 8 and second_language == 'Hindi') else third_language
+                    third_language = ''
 
                 valid_languages, language_error = validate_language_selection(
                     user['grade'],
