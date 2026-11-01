@@ -32,14 +32,38 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DB_PATH = os.path.join(BASE_DIR, 'vidhyastra.db')
 
 app = Flask(__name__)
-app.secret_key = os.environ.get(
-    'VIDHYASTRA_SECRET',
-    'dev-only-change-this-secret-before-deployment'
-)
+
+# Set VIDHYASTRA_ENV=production on the production host. Production must have
+# a strong secret supplied by the host's environment/configuration manager.
+APP_ENV = os.environ.get('VIDHYASTRA_ENV', 'development').strip().lower()
+IS_PRODUCTION = APP_ENV in {'production', 'prod'}
+_configured_secret = os.environ.get('VIDHYASTRA_SECRET', '').strip()
+
+if IS_PRODUCTION and not _configured_secret:
+    raise RuntimeError(
+        'VIDHYASTRA_SECRET is required when VIDHYASTRA_ENV=production. '
+        'Generate a strong key and configure it in the hosting environment.'
+    )
+
+if _configured_secret and len(_configured_secret) < 32:
+    raise RuntimeError(
+        'VIDHYASTRA_SECRET must contain at least 32 characters. '
+        'Generate a new key with secrets.token_urlsafe(48).'
+    )
+
+if not _configured_secret:
+    # Convenient for local development only. This random key changes on each
+    # restart, so local sessions will be invalidated after a restart.
+    _configured_secret = secrets.token_urlsafe(48)
+    app.logger.warning(
+        'VIDHYASTRA_SECRET is not set; using a temporary development-only key.'
+    )
+
+app.secret_key = _configured_secret
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = (
-    os.environ.get('VIDHYASTRA_HTTPS', '0') == '1'
+    IS_PRODUCTION or os.environ.get('VIDHYASTRA_HTTPS', '0') == '1'
 )
 
 SUBJECTS = [
@@ -607,90 +631,126 @@ def migrate_database(con):
         con.execute('PRAGMA foreign_keys = ON')
 
 
+
 def seed_configured_administrators(con):
-    """Create initial administrator accounts only from explicit environment values."""
+    """
+    Automatically create the shared Vidhyastra hackathon
+    Platform Admin account.
 
-    platform_email = os.environ.get(
-        'VIDHYASTRA_PLATFORM_ADMIN_EMAIL', ''
-    ).strip().lower()
+    These fictional credentials are intentionally shared
+    for the public hackathon demonstration.
+    """
 
-    platform_password = os.environ.get(
-        'VIDHYASTRA_PLATFORM_ADMIN_PASSWORD', ''
+    # Shared demo Platform Admin credentials.
+    platform_email = "platform.admin@vidhyastra.demo"
+    platform_password = "VidhyastraDemo@2026"
+    platform_name = "Vidhyastra Platform Admin"
+
+    password_hash = generate_password_hash(platform_password)
+
+    now = datetime.now().isoformat(timespec="seconds")
+
+    # Create the account if it does not exist.
+    # If it already exists as a platform administrator,
+    # reset its password to the shared demo password.
+    con.execute(
+        """
+        INSERT OR IGNORE INTO users
+        (name, email, phone, password_hash, role, created_at)
+        VALUES (?, ?, ?, ?, 'platform_admin', ?)
+        """,
+        (
+            platform_name,
+            platform_email,
+            "Not provided",
+            password_hash,
+            now
+        )
     )
 
-    platform_name = os.environ.get(
-        'VIDHYASTRA_PLATFORM_ADMIN_NAME',
-        'Vidhyastra Platform Admin'
+    existing = con.execute(
+        "SELECT id, role FROM users WHERE email = ?",
+        (platform_email,)
+    ).fetchone()
+
+    if not existing:
+        raise RuntimeError(
+            "Could not create the Vidhyastra Platform Admin account."
+        )
+
+    if existing["role"] != "platform_admin":
+        raise RuntimeError(
+            "The demo Platform Admin username is already "
+            "being used by an account with a different role. "
+            "Please resolve this account conflict."
+        )
+
+    # Keep the shared demo credentials working after restarts.
+    con.execute(
+        """
+        UPDATE users
+        SET name = ?, password_hash = ?
+        WHERE id = ?
+        """,
+        (
+            platform_name,
+            password_hash,
+            existing["id"]
+        )
     )
 
-    if platform_email and platform_password:
-
-        existing = con.execute(
-            'SELECT id, role FROM users WHERE email=?',
-            (platform_email,)
-        ).fetchone()
-
-        if not existing:
-
-            con.execute('''
-                INSERT INTO users
-                (name, email, phone, password_hash, role, created_at)
-                VALUES (?, ?, ?, ?, 'platform_admin', ?)
-            ''', (
-                platform_name,
-                platform_email,
-                'Not provided',
-                generate_password_hash(platform_password),
-                datetime.now().isoformat(timespec='seconds')
-            ))
-
-        elif existing['role'] != 'platform_admin':
-
-            app.logger.warning(
-                'Platform administrator email already belongs to another role; '
-                'no account role was changed.'
-            )
-
-    # Backward-compatible optional first school administrator for the demo school.
-
+    # Preserve the existing optional school-admin setup.
     school_email = os.environ.get(
-        'VIDHYASTRA_ADMIN_EMAIL', ''
+        "VIDHYASTRA_ADMIN_EMAIL", ""
     ).strip().lower()
 
     school_password = os.environ.get(
-        'VIDHYASTRA_ADMIN_PASSWORD', ''
+        "VIDHYASTRA_ADMIN_PASSWORD", ""
     )
 
     school_name = os.environ.get(
-        'VIDHYASTRA_ADMIN_NAME', 'School Administrator'
+        "VIDHYASTRA_ADMIN_NAME",
+        "School Administrator"
     )
 
     if school_email and school_password:
 
         school = con.execute(
-            'SELECT id FROM schools WHERE school_code=?',
-            ('VDS-DEMO',)
+            "SELECT id FROM schools WHERE school_code = ?",
+            ("VDS-DEMO",)
         ).fetchone()
 
-        existing = con.execute(
-            'SELECT id FROM users WHERE email=?',
+        existing_school_admin = con.execute(
+            "SELECT id FROM users WHERE email = ?",
             (school_email,)
         ).fetchone()
 
-        if school and not existing:
+        if school and not existing_school_admin:
 
-            con.execute('''
+            con.execute(
+                """
                 INSERT INTO users
-                (name, email, phone, password_hash, role, school_id, created_at)
+                (
+                    name,
+                    email,
+                    phone,
+                    password_hash,
+                    role,
+                    school_id,
+                    created_at
+                )
                 VALUES (?, ?, ?, ?, 'admin', ?, ?)
-            ''', (
-                school_name,
-                school_email,
-                'Not provided',
-                generate_password_hash(school_password),
-                school['id'],
-                datetime.now().isoformat(timespec='seconds')
-            ))
+                """,
+                (
+                    school_name,
+                    school_email,
+                    "Not provided",
+                    generate_password_hash(school_password),
+                    school["id"],
+                    now
+                )
+            )
+
 
 
 def init_db():
@@ -2911,6 +2971,13 @@ def not_found(error):
 init_db()
 
 if __name__ == '__main__':
-    app.run(
-        debug=os.environ.get('VIDHYASTRA_DEBUG', '1') == '1'
-    )
+    debug_requested = os.environ.get('VIDHYASTRA_DEBUG', '0').strip().lower() in {
+        '1', 'true', 'yes', 'on'
+    }
+
+    if IS_PRODUCTION and debug_requested:
+        raise RuntimeError(
+            'Flask debug mode is forbidden in production. Set Vidhyastra debug to 0.'
+        )
+
+    app.run(debug=debug_requested)
