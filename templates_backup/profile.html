@@ -1,1 +1,121 @@
-{% extends 'base.html' %}{% block title %}Profile · Vidhyastra{% endblock %}{% block content %}<section class="form-page"><div class="page-heading"><span class="eyebrow">YOUR SPACE</span><h1>Profile & preferences</h1><p>Personalize how Vidhyastra feels and speaks to you.</p></div><div class="panel profile-summary"><div class="avatar big">{{ user['name'][:1] }}</div><div><h2>{{ user['name'] }}</h2><p>{{ user['email'] }} · {{ user['phone'] }}</p><span class="pill">{{ user['role']|title }}</span>{% if user['roll_no'] %}<p class="muted">Roll number: {{ user['roll_no'] }}</p>{% endif %}</div></div><form class="form-card wide" method="post"><h2>Customize your space</h2><div class="form-grid"><label>Interface theme<select name="theme"><option value="light" {% if user['theme']=='light' %}selected{% endif %}>Light</option><option value="dark" {% if user['theme']=='dark' %}selected{% endif %}>Dark</option></select></label><label>Preferred language<select name="language">{% for l in ['English','Hindi','Telugu','Urdu','Tamil','Kannada','Marathi','Bengali'] %}<option {% if user['language']==l %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></label>{% if user['role']=='student' %}<label>Study buddy name<input name="bot_name" value="{{ user['bot_name'] }}" maxlength="30"></label>{% endif %}</div><button class="button primary" type="submit">Save preferences</button></form><div class="notice">Privacy note: student pacing information is intended for that student and their allocated teacher. This prototype uses a role-checked report page; a production release should add school administration, parent-consent, audit logging, and formal data-retention controls.</div></section>{% endblock %}
+
+{% extends 'base.html' %}
+{% block title %}Profile · Vidhyastra{% endblock %}
+
+{% block content %}
+<section class="form-page">
+    <div class="page-heading">
+        <span class="eyebrow">YOUR SPACE</span>
+        <h1>Profile & preferences</h1>
+        <p>Personalize your Vidhyastra account.</p>
+    </div>
+
+    <div class="panel profile-summary">
+        <div class="avatar big">{{ user['name'][:1] }}</div>
+        <div>
+            <h2>{{ user['name'] }}</h2>
+            <p>{{ user['email'] }} · {{ user['phone'] }}</p>
+            <span class="pill">{{ user['role']|title }}</span>
+            {% if user['roll_no'] %}
+            <p class="muted">Roll number: {{ user['roll_no'] }}</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <form class="form-card wide" method="post">
+        <h2>Customize your space</h2>
+
+        <div class="form-grid">
+            <label>Interface theme
+                <select name="theme">
+                    <option value="light" {% if user['theme']=='light' %}selected{% endif %}>Light</option>
+                    <option value="dark" {% if user['theme']=='dark' %}selected{% endif %}>Dark</option>
+                </select>
+            </label>
+
+            <label>Preferred interface language
+                <select name="language">
+                    {% for l in ['English','Hindi','Telugu','Urdu','Tamil','Kannada','Marathi','Bengali'] %}
+                    <option {% if user['language']==l %}selected{% endif %}>{{ l }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            {% if user['role']=='student' %}
+            <label>Study buddy name
+                <input name="bot_name" value="{{ user['bot_name'] }}" maxlength="30">
+            </label>
+            {% else %}
+            <input type="hidden" name="bot_name" value="{{ user['bot_name'] }}">
+            {% endif %}
+        </div>
+
+        {% if user['role']=='student' and user['grade'] in ['Class 5','Class 6','Class 7','Class 8'] %}
+        <hr>
+        <h2>Language subjects</h2>
+        <p class="muted">R1 is your first language. R2 is Telugu or Hindi. R3 is available for Classes 6–8.</p>
+
+        <div class="form-grid">
+            <label>First language (R1)
+                <select name="first_language" required>
+                    {% for l in ['English','Telugu','Hindi'] %}
+                    <option value="{{ l }}" {% if user['first_language']==l %}selected{% endif %}>{{ l }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <label>Second language (R2)
+                <select name="second_language" required>
+                    {% for l in ['Telugu','Hindi'] %}
+                    {% if l != user['first_language'] %}
+                    <option value="{{ l }}" {% if user['second_language']==l %}selected{% endif %}>{{ l }}</option>
+                    {% endif %}
+                    {% endfor %}
+                </select>
+            </label>
+
+            {% if user['grade'] != 'Class 5' %}
+            <label>Third language (R3)
+                <select name="third_language" required>
+                    {% for l in ['Telugu','Hindi','Sanskrit'] %}
+                    {% if l != user['first_language'] and l != user['second_language'] %}
+                    <option value="{{ l }}" {% if user['third_language']==l %}selected{% endif %}>{{ l }}</option>
+                    {% endif %}
+                    {% endfor %}
+                </select>
+            </label>
+            {% else %}
+            <input type="hidden" name="third_language" value="">
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <hr>
+        <h2>Change password</h2>
+        <p class="muted">
+            Use this if your school administrator gave you a temporary password,
+            or if you are still using an old demo password.
+        </p>
+
+        <div class="form-grid">
+            <label>Current password
+                <input name="current_password" type="password" autocomplete="current-password">
+            </label>
+            <label>New password
+                <input name="new_password" type="password" minlength="8" autocomplete="new-password">
+            </label>
+            <label>Confirm new password
+                <input name="confirm_password" type="password" minlength="8" autocomplete="new-password">
+            </label>
+        </div>
+
+        <button class="button primary" type="submit">Save changes</button>
+    </form>
+
+    <div class="notice">
+        Student learning information is visible only to the student,
+        linked parent and teachers assigned by the same school,
+        subject to this prototype's access controls.
+    </div>
+</section>
+{% endblock %}

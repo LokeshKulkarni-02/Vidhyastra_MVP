@@ -7,7 +7,7 @@
     <div class="page-heading">
         <span class="eyebrow">GET STARTED</span>
         <h1>Build your learning space.</h1>
-        <p>Choose your role. Student curriculum details help us organize the learning journey.</p>
+        <p>Choose your role and enter the school code provided by your school.</p>
     </div>
 
     <form class="form-card wide" method="post">
@@ -36,7 +36,12 @@
                 </select>
             </label>
 
-            <label>Preferred language
+            <label>School code
+                <input name="school_code" required maxlength="20" placeholder="e.g. GLEC2026" autocomplete="off">
+                <small>Ask your school administrator for this code.</small>
+            </label>
+
+            <label>Preferred interface language
                 <select name="language">
                     <option>English</option>
                     <option>Hindi</option>
@@ -47,6 +52,7 @@
                     <option>Marathi</option>
                     <option>Bengali</option>
                 </select>
+                <small>This changes the preferred interface language, not R1/R2/R3.</small>
             </label>
         </div>
 
@@ -82,12 +88,42 @@
                 </label>
 
                 <label>Class
-                    <select name="grade">
+                    <select name="grade" id="grade">
                         <option value="">Select class</option>
-                        {% for g in range(6,11) %}
+                        {% for g in range(5,11) %}
                         <option>Class {{ g }}</option>
                         {% endfor %}
                     </select>
+                </label>
+            </div>
+
+            <div class="section-divider">
+                <span>Language subjects</span>
+                <small>For Classes 5–8</small>
+            </div>
+
+            <div class="form-grid">
+                <label>First language (R1)
+                    <select name="first_language" id="first_language">
+                        <option value="">Select R1</option>
+                        <option>English</option>
+                        <option>Telugu</option>
+                        <option>Hindi</option>
+                    </select>
+                </label>
+
+                <label>Second language (R2)
+                    <select name="second_language" id="second_language">
+                        <option value="">Select R1 first</option>
+                    </select>
+                </label>
+
+                <label id="r3-field">
+                    Third language (R3)
+                    <select name="third_language" id="third_language">
+                        <option value="">Select R2 first</option>
+                    </select>
+                    <small id="r3-help">Available for Classes 6–8.</small>
                 </label>
             </div>
         </div>
@@ -95,13 +131,13 @@
         <div id="parent-fields" class="hidden">
             <label>Student roll number (optional)
                 <input name="child_roll" placeholder="e.g. VDS-A1B2C3">
-                <small>You can link your child's account later if you don't have the roll number yet.</small>
+                <small>The roll number must belong to a student in the same school.</small>
             </label>
         </div>
 
         <p class="notice">
             A unique Vidhyastra roll number is created for student accounts.
-            This prototype uses demo syllabus content; full board-wise syllabus data must be added before launch.
+            School codes identify the school; they do not replace any admission verification your school may require.
         </p>
 
         <button class="button primary full" type="submit">
@@ -112,5 +148,78 @@
             Already registered? <a href="{{ url_for('login') }}">Sign in</a>
         </p>
     </form>
+</section>
+
+<script>
+(function () {
+    const grade = document.getElementById("grade");
+    const r1 = document.getElementById("first_language");
+    const r2 = document.getElementById("second_language");
+    const r3 = document.getElementById("third_language");
+    const r3Field = document.getElementById("r3-field");
+    const r3Help = document.getElementById("r3-help");
+
+    function setOptions(select, values, placeholder, preferred) {
+        select.innerHTML = "";
+        const first = document.createElement("option");
+        first.value = "";
+        first.textContent = placeholder;
+        select.appendChild(first);
+
+        values.forEach(function (value) {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = value;
+            if (value === preferred) option.selected = true;
+            select.appendChild(option);
+        });
+    }
+
+    function updateLanguages() {
+        const classNumber = parseInt((grade.value.match(/\d+/) || [0])[0], 10);
+        const first = r1.value;
+
+        const r2Options = ["Telugu", "Hindi"].filter(x => x !== first);
+        const previousR2 = r2.value;
+        setOptions(r2, r2Options, "Select R2", r2Options.includes(previousR2) ? previousR2 : "");
+
+        const second = r2.value;
+        let r3Options = [];
+
+        if (second === "Telugu") {
+            r3Options = ["Hindi", "Sanskrit"];
+        } else if (second === "Hindi") {
+            r3Options = ["Telugu", "Sanskrit"];
+        }
+
+        r3Options = r3Options.filter(x => x !== first && x !== second);
+
+        if (classNumber === 5) {
+            r3Field.style.display = "none";
+            r3.required = false;
+            setOptions(r3, [], "Not applicable", "");
+            r3Help.textContent = "R3 is not enabled for Class 5 in this MVP.";
+        } else {
+            r3Field.style.display = "";
+            r3.required = classNumber >= 6 && classNumber <= 8;
+            const preferred = second === "Telugu" ? "Hindi" : "Telugu";
+            setOptions(r3, r3Options, "Select R3", r3Options.includes(preferred) ? preferred : "");
+            r3Help.textContent = classNumber >= 6 && classNumber <= 8
+                ? "R3 bridge lessons are mapped for Classes 6–8."
+                : "Language selection is available for Classes 5–8.";
+        }
+    }
+
+    [grade, r1, r2].forEach(el => el.addEventListener("change", updateLanguages));
+
+    document.getElementById("role").addEventListener("change", function () {
+        const student = this.value === "student";
+        document.getElementById("student-fields").style.display = student ? "" : "none";
+        document.getElementById("parent-fields").style.display = student ? "none" : "";
+    });
+
+    updateLanguages();
+})();
+</script>
 </section>
 {% endblock %}

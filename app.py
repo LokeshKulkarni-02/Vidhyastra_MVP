@@ -12,7 +12,16 @@ from flask import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from curriculum_catalog import get_grade_curriculum, get_chapter
+
+from curriculum_catalog import get_chapter
+from mvp_curriculum import get_mvp_grade_curriculum
+from language_curriculum import (
+    get_default_r3,
+    get_r3_options,
+    validate_language_selection,
+    get_r3_curriculum_info,
+)
+
 from question_bank import get_topic_questions
 
 # ==================================================
@@ -141,6 +150,36 @@ TOPIC_BANK = {
 # ==================================================
 # DATABASE CONNECTION AND SCHEMA
 # ==================================================
+
+def grade_number(grade):
+    """Return the numeric class from values such as 'Class 6' or '6'."""
+    match = re.search(r"(\d+)", str(grade or ""))
+    return int(match.group(1)) if match else 0
+
+
+def language_choices_for_student(grade, first_language, second_language):
+    """Return R3 choices for the current Vidhyastra MVP rules."""
+    number = grade_number(grade)
+    if number < 6 or number > 8:
+        return []
+    choices = (
+        ["Hindi", "Sanskrit"] if second_language == "Telugu"
+        else ["Telugu", "Sanskrit"] if second_language == "Hindi"
+        else []
+    )
+    return [
+        item for item in choices
+        if item not in (first_language, second_language)
+    ]
+
+
+def default_r3_for_student(grade, first_language, second_language):
+    choices = language_choices_for_student(
+        grade, first_language, second_language
+    )
+    preferred = "Hindi" if second_language == "Telugu" else "Telugu"
+    return preferred if preferred in choices else (choices[0] if choices else "")
+
 
 def db():
     con = sqlite3.connect(DB_PATH)
@@ -316,6 +355,21 @@ def migrate_database(con):
     con.execute('BEGIN IMMEDIATE')
 
     try:
+
+        # Keep curriculum language choices separate from the existing
+        # `language` field, which controls the website interface.
+        add_column_if_missing(
+            con, 'users', 'first_language',
+            "TEXT NOT NULL DEFAULT 'English'"
+        )
+        add_column_if_missing(
+            con, 'users', 'second_language',
+            "TEXT NOT NULL DEFAULT ''"
+        )
+        add_column_if_missing(
+            con, 'users', 'third_language',
+            "TEXT NOT NULL DEFAULT ''"
+        )
 
         con.execute('''
             CREATE TABLE IF NOT EXISTS schools (
@@ -994,6 +1048,45 @@ def register():
             )
             return redirect(url_for('register'))
 
+        first_language = form.get('first_language', 'English').strip()
+        second_language = form.get('second_language', '').strip()
+        third_language = form.get('third_language', '').strip()
+        grade_value = form.get('grade', '').strip()
+
+        if first_language not in ('English', 'Telugu', 'Hindi'):
+            flash('Choose a valid first language.', 'error')
+            return redirect(url_for('register'))
+        if second_language not in ('Telugu', 'Hindi'):
+            flash('Choose Telugu or Hindi as your second language.', 'error')
+            return redirect(url_for('register'))
+        if first_language == second_language:
+            flash('Your second language must be different from your first language.', 'error')
+            return redirect(url_for('register'))
+
+        class_no = grade_number(grade_value)
+        if class_no == 5:
+            third_language = ''
+        elif 6 <= class_no <= 8:
+            allowed_r3 = language_choices_for_student(
+                grade_value, first_language, second_language
+            )
+            if not allowed_r3:
+                flash(
+                    'No valid third-language option is available. '
+                    'Please change your first or second language.',
+                    'error'
+                )
+                return redirect(url_for('register'))
+            if not third_language:
+                third_language = default_r3_for_student(
+                    grade_value, first_language, second_language
+                )
+            if third_language not in allowed_r3:
+                flash('Choose a valid third language for your class.', 'error')
+                return redirect(url_for('register'))
+        else:
+            third_language = ''
+
     con = db()
 
     try:
@@ -1022,9 +1115,10 @@ def register():
             INSERT INTO users (
                 name, email, phone, password_hash, role,
                 region, district, state, board, grade,
-                language, roll_no, school_id, created_at
+                language, first_language, second_language, third_language,
+                roll_no, school_id, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             name,
             email,
@@ -1037,6 +1131,9 @@ def register():
             form.get('board', '').strip(),
             form.get('grade', '').strip(),
             form.get('language', 'English'),
+            first_language if role == 'student' else 'English',
+            second_language if role == 'student' else '',
+            third_language if role == 'student' else '',
             roll_no,
             school['id'],
             datetime.now().isoformat(timespec='seconds')
@@ -1861,14 +1958,74 @@ def profile():
 
         try:
 
+            theme = request.form.get('theme', 'light')
+            if theme not in ('light', 'dark'):
+                theme = 'light'
+
+            ui_language = request.form.get('language', 'English')
+            if ui_language not in ('English', 'Telugu', 'Hindi'):
+                ui_language = 'English'
+
+            first_language = request.form.get(
+                'first_language', user['first_language'] or 'English'
+            ).strip()
+            second_language = request.form.get(
+                'second_language', user['second_language'] or ''
+            ).strip()
+            third_language = request.form.get(
+                'third_language', user['third_language'] or ''
+            ).strip()
+
+            if user['role'] == 'student' and any(
+                key in request.form
+                for key in ('first_language', 'second_language', 'third_language')
+            ):
+                class_no = grade_number(user['grade'])
+                if (
+                    first_language not in ('English', 'Telugu', 'Hindi')
+                    or second_language not in ('Telugu', 'Hindi')
+                    or first_language == second_language
+                ):
+                    flash(
+                        'Please choose valid, different first and second languages.',
+                        'error'
+                    )
+                    return redirect(url_for('profile'))
+
+                if class_no == 5:
+                    third_language = ''
+                elif 6 <= class_no <= 8:
+                    allowed_r3 = language_choices_for_student(
+                        user['grade'], first_language, second_language
+                    )
+                    if not allowed_r3:
+                        flash(
+                            'No valid third-language option is available.',
+                            'error'
+                        )
+                        return redirect(url_for('profile'))
+                    if not third_language:
+                        third_language = default_r3_for_student(
+                            user['grade'], first_language, second_language
+                        )
+                    if third_language not in allowed_r3:
+                        flash('Please choose a valid third language.', 'error')
+                        return redirect(url_for('profile'))
+                else:
+                    third_language = ''
+
             con.execute('''
                 UPDATE users
-                SET theme=?, language=?, bot_name=?
+                SET theme=?, language=?, bot_name=?,
+                    first_language=?, second_language=?, third_language=?
                 WHERE id=?
             ''', (
-                request.form.get('theme', 'light'),
-                request.form.get('language', 'English'),
+                theme,
+                ui_language,
                 request.form.get('bot_name', 'Astra').strip()[:30] or 'Astra',
+                first_language,
+                second_language,
+                third_language,
                 user['id']
             ))
 
@@ -1992,11 +2149,26 @@ def curriculum():
     if not user:
         abort(403)
 
-    curriculum_data = get_grade_curriculum(user['grade'])
+    curriculum_data = get_mvp_grade_curriculum(user['grade'])
+    class_no = grade_number(user['grade'])
+    r3_bridge_note = ''
+    if class_no in (6, 7, 8) and user['third_language']:
+        bridge_levels = {6: 'Class 2', 7: 'Class 3', 8: 'Class 4'}
+        r3_bridge_note = (
+            'Vidhyastra bridge level: '
+            + bridge_levels[class_no]
+            + '. This is a platform learning pathway, not an official NCERT equivalence.'
+        )
+
     return render_template(
         'curriculum.html',
         user=user,
-        curriculum=curriculum_data
+        curriculum=curriculum_data,
+        first_language=user['first_language'],
+        second_language=user['second_language'],
+        third_language=user['third_language'],
+        r3_bridge_note=r3_bridge_note,
+        r3_curriculum_info=r3_bridge_note
     )
 
 
