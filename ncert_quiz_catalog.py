@@ -197,32 +197,72 @@ def _science_chapter_id(grade: str, number: int) -> str:
     return f"c{int(grade.split()[-1])}-sci-ch{number:02d}"
 
 
-def _chapter_entry(grade: str, subject: str, number: int, title: str,
-                   part: str | None, source_url: str,
-                   old_by_id: dict[str, dict[str, Any]]) -> dict[str, Any]:
+
+def _chapter_entry(
+    grade: str,
+    subject: str,
+    number: int,
+    title: str,
+    part: str | None,
+    source_url: str,
+    old_by_id: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """
+    Build a curriculum chapter and connect it to its question-bank assessment.
+
+    Preserve existing practice-ready topics and their mappings.
+    When an older chapter exists without usable practice topics,
+    connect it to the new 20-question Chapter Assessment instead.
+    """
+
     if subject == "Mathematics":
         chapter_id = _math_chapter_id(grade, number, part)
     else:
         chapter_id = _science_chapter_id(grade, number)
 
-    old = old_by_id.get(chapter_id)
-    # Preserve existing question/topic mappings and all their metadata.
-    if old:
-        chapter = deepcopy(old)
-        chapter["title"] = title
-        chapter["number"] = number
-        chapter["part"] = part
-        chapter.setdefault("source", {})
-        chapter["source"].setdefault("textbook_portal", source_url)
-        return chapter
-
-    topic = {
+    assessment_topic = {
         "id": f"{chapter_id}-assessment",
         "title": "Chapter Assessment",
         "practice_ready": True,
         "chapter_assessment": True,
         "concepts": [],
     }
+
+    old = old_by_id.get(chapter_id)
+
+    if old:
+        # Preserve the existing chapter and any working practice topics.
+        chapter = deepcopy(old)
+
+        chapter["id"] = chapter_id
+        chapter["title"] = title
+        chapter["number"] = number
+        chapter["part"] = part
+
+        # Preserve existing source information while ensuring the textbook link exists.
+        chapter["source"] = dict(chapter.get("source") or {})
+        chapter["source"].setdefault("textbook_portal", source_url)
+
+        existing_topics = chapter.get("topics") or []
+
+        has_working_practice = any(
+            isinstance(topic, dict) and topic.get("practice_ready") is True
+            for topic in existing_topics
+        )
+
+        if has_working_practice:
+            # Keep existing assessments and supplementary topic drills intact.
+            chapter["status"] = "question_bank_ready"
+            return chapter
+
+        # The old chapter existed only as a catalogue entry.
+        # Attach its matching assessment from the additive question bank.
+        chapter["status"] = "question_bank_ready"
+        chapter["topics"] = [assessment_topic]
+
+        return chapter
+
+    # No older chapter record exists. Create a new assessment-ready entry.
     return {
         "id": chapter_id,
         "number": number,
@@ -231,9 +271,12 @@ def _chapter_entry(grade: str, subject: str, number: int, title: str,
         "status": "question_bank_ready",
         "outline": [],
         "learning_outcomes": [],
-        "topics": [topic],
-        "source": {"textbook_portal": source_url},
+        "topics": [assessment_topic],
+        "source": {
+            "textbook_portal": source_url
+        },
     }
+
 
 
 def install_ncert_catalogue(curriculum: dict[str, Any]) -> None:
