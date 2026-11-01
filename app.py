@@ -631,90 +631,126 @@ def migrate_database(con):
         con.execute('PRAGMA foreign_keys = ON')
 
 
+
 def seed_configured_administrators(con):
-    """Create initial administrator accounts only from explicit environment values."""
+    """
+    Automatically create the shared Vidhyastra hackathon
+    Platform Admin account.
 
-    platform_email = os.environ.get(
-        'VIDHYASTRA_PLATFORM_ADMIN_EMAIL', ''
-    ).strip().lower()
+    These fictional credentials are intentionally shared
+    for the public hackathon demonstration.
+    """
 
-    platform_password = os.environ.get(
-        'VIDHYASTRA_PLATFORM_ADMIN_PASSWORD', ''
+    # Shared demo Platform Admin credentials.
+    platform_email = "platform.admin@vidhyastra.demo"
+    platform_password = "VidhyastraDemo@2026"
+    platform_name = "Vidhyastra Platform Admin"
+
+    password_hash = generate_password_hash(platform_password)
+
+    now = datetime.now().isoformat(timespec="seconds")
+
+    # Create the account if it does not exist.
+    # If it already exists as a platform administrator,
+    # reset its password to the shared demo password.
+    con.execute(
+        """
+        INSERT OR IGNORE INTO users
+        (name, email, phone, password_hash, role, created_at)
+        VALUES (?, ?, ?, ?, 'platform_admin', ?)
+        """,
+        (
+            platform_name,
+            platform_email,
+            "Not provided",
+            password_hash,
+            now
+        )
     )
 
-    platform_name = os.environ.get(
-        'VIDHYASTRA_PLATFORM_ADMIN_NAME',
-        'Vidhyastra Platform Admin'
+    existing = con.execute(
+        "SELECT id, role FROM users WHERE email = ?",
+        (platform_email,)
+    ).fetchone()
+
+    if not existing:
+        raise RuntimeError(
+            "Could not create the Vidhyastra Platform Admin account."
+        )
+
+    if existing["role"] != "platform_admin":
+        raise RuntimeError(
+            "The demo Platform Admin username is already "
+            "being used by an account with a different role. "
+            "Please resolve this account conflict."
+        )
+
+    # Keep the shared demo credentials working after restarts.
+    con.execute(
+        """
+        UPDATE users
+        SET name = ?, password_hash = ?
+        WHERE id = ?
+        """,
+        (
+            platform_name,
+            password_hash,
+            existing["id"]
+        )
     )
 
-    if platform_email and platform_password:
-
-        existing = con.execute(
-            'SELECT id, role FROM users WHERE email=?',
-            (platform_email,)
-        ).fetchone()
-
-        if not existing:
-
-            con.execute('''
-                INSERT INTO users
-                (name, email, phone, password_hash, role, created_at)
-                VALUES (?, ?, ?, ?, 'platform_admin', ?)
-            ''', (
-                platform_name,
-                platform_email,
-                'Not provided',
-                generate_password_hash(platform_password),
-                datetime.now().isoformat(timespec='seconds')
-            ))
-
-        elif existing['role'] != 'platform_admin':
-
-            app.logger.warning(
-                'Platform administrator email already belongs to another role; '
-                'no account role was changed.'
-            )
-
-    # Backward-compatible optional first school administrator for the demo school.
-
+    # Preserve the existing optional school-admin setup.
     school_email = os.environ.get(
-        'VIDHYASTRA_ADMIN_EMAIL', ''
+        "VIDHYASTRA_ADMIN_EMAIL", ""
     ).strip().lower()
 
     school_password = os.environ.get(
-        'VIDHYASTRA_ADMIN_PASSWORD', ''
+        "VIDHYASTRA_ADMIN_PASSWORD", ""
     )
 
     school_name = os.environ.get(
-        'VIDHYASTRA_ADMIN_NAME', 'School Administrator'
+        "VIDHYASTRA_ADMIN_NAME",
+        "School Administrator"
     )
 
     if school_email and school_password:
 
         school = con.execute(
-            'SELECT id FROM schools WHERE school_code=?',
-            ('VDS-DEMO',)
+            "SELECT id FROM schools WHERE school_code = ?",
+            ("VDS-DEMO",)
         ).fetchone()
 
-        existing = con.execute(
-            'SELECT id FROM users WHERE email=?',
+        existing_school_admin = con.execute(
+            "SELECT id FROM users WHERE email = ?",
             (school_email,)
         ).fetchone()
 
-        if school and not existing:
+        if school and not existing_school_admin:
 
-            con.execute('''
+            con.execute(
+                """
                 INSERT INTO users
-                (name, email, phone, password_hash, role, school_id, created_at)
+                (
+                    name,
+                    email,
+                    phone,
+                    password_hash,
+                    role,
+                    school_id,
+                    created_at
+                )
                 VALUES (?, ?, ?, ?, 'admin', ?, ?)
-            ''', (
-                school_name,
-                school_email,
-                'Not provided',
-                generate_password_hash(school_password),
-                school['id'],
-                datetime.now().isoformat(timespec='seconds')
-            ))
+                """,
+                (
+                    school_name,
+                    school_email,
+                    "Not provided",
+                    generate_password_hash(school_password),
+                    school["id"],
+                    now
+                )
+            )
+
 
 
 def init_db():
