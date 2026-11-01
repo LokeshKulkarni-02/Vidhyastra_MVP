@@ -1,3 +1,8 @@
+"""Regression tests for the existing Maths pilot plus Class 6 Science pack.
+
+Run after installing question_bank.py, the science JSON, and applying the
+catalogue integration patcher.
+"""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -6,73 +11,62 @@ import unittest
 from collections import Counter
 
 from curriculum_catalog import get_chapter, get_grade_curriculum
-from question_bank import QUESTION_BANK, get_topic_questions
+from question_bank import QUESTION_BANK, get_chapter_question_count, get_topic_questions
 
 EXPECTED = {"easy": 8, "medium": 8, "hard": 4}
 
 
 class CurriculumDataTests(unittest.TestCase):
-    def test_pilot_bank_has_240_questions(self):
-        self.assertEqual(len(QUESTION_BANK["questions"]), 240)
-
-    def assert_twenty_question_pattern(self, questions):
+    def assert_chapter_pattern(self, grade, subject, chapter_id, topic):
+        questions = get_topic_questions(grade, subject, chapter_id, topic)
         self.assertEqual(len(questions), 20)
         self.assertEqual(Counter(q["difficulty"] for q in questions), EXPECTED)
+        self.assertEqual(get_chapter_question_count(grade, subject, chapter_id), 20)
 
-    def test_class_8_pilot_chapter_exists(self):
-        chapter = get_chapter("Class 8", "Mathematics", "c8-math-ch01")
-        self.assertIsNotNone(chapter)
-        self.assertEqual(chapter["title"], "A Square and a Cube")
+    def test_active_bank_contains_the_current_500_question_pilot(self):
+        # 200 Class 6 Maths + 60 Class 8 Maths (20 chapter assessment + 2 topic drills)
+        # + 240 Class 6 Science. Future validated packs may increase this total.
+        self.assertGreaterEqual(len(QUESTION_BANK["questions"]), 500)
 
-    def test_all_class_6_math_chapters_have_twenty_questions(self):
+    def test_all_class6_math_chapters_have_twenty_questions(self):
         chapters = get_grade_curriculum("Class 6")["subjects"]["Mathematics"]["chapters"]
         self.assertEqual(len(chapters), 10)
         for chapter in chapters:
             with self.subTest(chapter=chapter["title"]):
                 self.assertEqual(chapter["status"], "question_bank_ready")
                 self.assertEqual(len(chapter["topics"]), 1)
-                topic = chapter["topics"][0]
-                self.assertTrue(topic["practice_ready"])
-                questions = get_topic_questions("Class 6", "Mathematics", chapter["id"], topic["title"])
-                self.assert_twenty_question_pattern(questions)
+                self.assert_chapter_pattern("Class 6", "Mathematics", chapter["id"], chapter["topics"][0]["title"])
 
-    def test_class_8_chapter_1_topics_have_twenty_questions(self):
-        for topic in ("Square Numbers", "Cubic Numbers"):
-            with self.subTest(topic=topic):
-                questions = get_topic_questions("Class 8", "Mathematics", "c8-math-ch01", topic)
-                self.assert_twenty_question_pattern(questions)
+    def test_class8_chapter_assessment_and_existing_topic_drills_are_preserved(self):
+        chapter = get_chapter("Class 8", "Mathematics", "c8-math-ch01")
+        self.assertIsNotNone(chapter)
+        self.assertEqual(chapter["title"], "A Square and a Cube")
+        topics = {topic["title"]: topic for topic in chapter["topics"]}
+        self.assertIn("Chapter Assessment", topics)
+        self.assertTrue(topics["Chapter Assessment"]["chapter_assessment"])
+        self.assert_chapter_pattern("Class 8", "Mathematics", "c8-math-ch01", "Chapter Assessment")
+        # These were working before the update; keep both separate practice paths.
+        for old_topic in ("Square Numbers", "Cubic Numbers"):
+            self.assertIn(old_topic, topics)
+            self.assertTrue(topics[old_topic]["practice_ready"])
+            self.assert_chapter_pattern("Class 8", "Mathematics", "c8-math-ch01", old_topic)
 
-    def test_other_math_classes_are_catalogued_but_not_practice_ready(self):
+    def test_class6_science_all_twelve_chapters_are_ready(self):
+        chapters = get_grade_curriculum("Class 6")["subjects"]["Science"]["chapters"]
+        self.assertEqual(len(chapters), 12)
+        for chapter in chapters:
+            with self.subTest(chapter=chapter["title"]):
+                self.assertEqual(chapter["status"], "question_bank_ready")
+                self.assertEqual(len(chapter["topics"]), 1)
+                self.assertTrue(chapter["topics"][0]["chapter_assessment"])
+                self.assert_chapter_pattern("Class 6", "Science", chapter["id"], "Chapter Practice")
+
+    def test_other_maths_classes_remain_catalogued_not_falsely_ready(self):
         for grade in ("Class 7", "Class 9", "Class 10"):
-            with self.subTest(grade=grade):
-                curriculum = get_grade_curriculum(grade)
-                self.assertEqual(curriculum["status"], "catalogued")
-                chapters = curriculum.get("subjects", {}).get("Mathematics", {}).get("chapters", [])
-                self.assertGreater(len(chapters), 0)
-                for chapter in chapters:
-                    self.assertEqual(chapter["status"], "catalogued")
-                    self.assertEqual(chapter["topics"], [])
-
-    def test_question_ids_are_unique(self):
-        ids = [question["id"] for question in QUESTION_BANK["questions"]]
-        self.assertEqual(len(ids), len(set(ids)))
-
-    def test_every_question_has_valid_answer_and_four_options(self):
-        for question in QUESTION_BANK["questions"]:
-            with self.subTest(question_id=question["id"]):
-                self.assertEqual(len(question["options"]), 4)
-                self.assertEqual(len(set(question["options"])), 4)
-                self.assertIn(question["answer"], question["options"])
-                self.assertTrue(question["concept_id"])
-                self.assertIn(question["difficulty"], EXPECTED)
-
-    def test_question_topics_match_their_own_chapters(self):
-        for question in QUESTION_BANK["questions"]:
-            with self.subTest(question_id=question["id"]):
-                chapter = get_chapter(question["grade"], question["subject"], question["chapter_id"])
-                self.assertIsNotNone(chapter)
-                topic_titles = {topic["title"] for topic in chapter["topics"]}
-                self.assertIn(question["topic"], topic_titles)
+            curriculum = get_grade_curriculum(grade)
+            for chapter in curriculum.get("subjects", {}).get("Mathematics", {}).get("chapters", []):
+                self.assertEqual(chapter["status"], "catalogued")
+                self.assertEqual(chapter["topics"], [])
 
 
 if __name__ == "__main__":

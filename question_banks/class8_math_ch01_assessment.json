@@ -1,0 +1,408 @@
+{
+  "bank_version": "class8-math-ch01-assessment-1.0",
+  "curriculum_version": "NCERT-Ganita-Prakash-Class8-2026-27",
+  "source_note": "Original Vidhyastra questions for the chapter assessment; not copied from the textbook. Teacher review is required before production use.",
+  "source": "https://ncert.nic.in/textbook.php",
+  "questions": [
+    {
+      "id": "C8M1-CA-001",
+      "grade": "Class 8",
+      "subject": "Mathematics",
+      "chapter_id": "c8-math-ch01",
+      "topic": "Chapter Assessment",
+      "concept_id": "square-as-product",
+      "concept": "A square number as n × n",
+      "prerequisites": [],
+      "difficulty": "easy",
+      "q": "What is 13 squared?",
+      "options": [
+        "26",
+        "139",
+        "169",
+        "196"
+      ],
+      "answer": "169",
+      "why": "13² = 13 × 13 = 169."
+    },
+    {
+      "id": "C8M1-CA-002",
+      "grade": "Class 8",
+      "subject": "Mathematics",
+      "chapter_id": "c8-math-ch01",
+      "topic": "Chapter Assessment",
+      "concept_id": "cube-as-product",
+      "concept": "A cube number as n × n × n",
+      "prerequisites": [],
+      "difficulty": "easy",
+      "q": "What is 5 cubed?",
+      "options": [
+        "25",
+        "75",
+        "100",
+        "125"
+      ],
+      "answer": "125",
+      "why": "5³ = 5 × 5 × 5 = 125."
+    },
+    {
+      "id": "C8M1-CA-003",
+      "grade": "Class 8",
+      "subject": "Mathematics",
+      "chapter_id": "c8-math-ch01",
+      "topic": "Chapter Assessment",
+      "concept_id": "recognising-square-numbers",
+      "concept": "Recognising perfect squares",
+      "prerequisites": [],
+      "difficulty": "easy",
+      "q": "Which number is a perfect square?",
+      "options": [
+        "180",
+        "196",
+        "210",
+        "230"
+      ],
+      "answer": "196",
+      "why": "196 = 14 × 14 = 14²."
+    },
+    {
+      "id": "C8M1-CA-004",
+      "grade": "Class 8",
+      "subject": "Mathematics",
+      "chapter_id": "c8-math-ch01",
+      "topic": "Chapter Assessment",
+      "concept_id": "recognising-cubes",
+      "concept": "Recognising perfect cubes",
+      "prerequisites": [],
+      "difficulty": "easy",
+      "q": "Which number is a perfect cube?",
+      "options": [
+        "144",
+        "180",
+        "216",
+        "250"
+      ],
+      "answer": "216",
+      "why": "216 = 6 × 6 × 6 = 6³."
+    },
+    {
+      "id": "C8M1-CA-005",
+      "grade": "Class 8",
+      "subject": "Mathematics",
+      "chapter_id": "c8-math-ch01",
+      "topic": "Chapter Assessment",
+      "concept_id": "square-roots",
+      "concept": "Finding square roots",
+      "prerequisites": [],
+      "difficulty": "easy",
+      "q": "What is the square root of 256?",
+      "options": [
+        "14",
+        "15",
+        "16",
+        "18"
+      ],
+      "answer": "16",
+      "why": "16 × 16 = 256, so √256 = 16."
+    },
+    {
+      "id": "C8M1-CA-006",
+      "grade": "Class 8",
+      "subject": "Mathematics",
+      "chapter_id": "c8-math-ch01",
+      "topic": "Chapter Assessment",
+      "concept_id": "cube-roots",
+      "concept": "Finding cube roots",
+      "prerequisites": [],
+      "difficulty": "easy",
+      "q": "What is the cube root of 512?",
+      "options": [
+        "6",
+        "7",
+        "8",
+        "9"
+      ],
+      "answer": "8",
+      "why": "8 × 8 × 8 = 512, so ∛512 = 8."
+    },
+    {
+      "id": "C8M1-CA-007",
+      "grade": "Class 8",
+      "subject": "Mathematics",
+      "chapter_id": "c8-math-ch01",
+      "topic": "Chapter Assessment",
+      "concept_id": "square-number-patterns",
+      "concept": "Patterns in square numbers",
+      "prerequisites": [],
+      "difficulty": "easy",
+      "q": "What is the next square number after 64?",
+      "options": [
+        "72",
+        "80",
+        "81",
+        "100"
+      ],
+      "answer": "81",
+      "why": "64 = 8²; the next square is 9² = 81."
+    },
+    {
+      "id": "C8M1-CA-008",
+      "grade": "Class 8",
+      "subject": "Mathematics",
+      "chapter_id": "c8-math-ch01",
+      "topic": "Chapter Assessment",
+      "concept_id": "square-as-product",
+      "concept": "A square number as n × n",
+      "prerequisites": [],
+      "difficulty": "easy",
+      "q": "Which expression equals 100?",
+      "options": [
+        "8²",
+        "9²",
+        "10²",
+        "11²"
+      ],
+      "answer": "10²",
+      "why": "10² = 10 × 10 = 100."
+    },
+    {
+      "id": "C8M1-CA-009",
+      "grade": "Class 8",
+      "subject": "Mathematics",
+      "chapter_id": "c8-math-ch01",
+      "topic": "Chapter Assessment",
+      "concept_id": "square-number-patterns",
+      "concept": "Patterns in square numbers",
+      "prerequisites": [],
+      "difficulty": "medium",
+      "q": "What is the difference between 12² and 11²?",
+      "options": [
+        "21",
+        "22",
+        "23",
+        "24"
+      ],
+      "answer": "23",
+      "why": "12² − 11² = 144 − 121 = 23."
+    },
+    {
+      "id": "C8M1-CA-010",
+      "grade": "Class 8",
+      "subject": "Mathematics",
+      "chapter_id": "c8-math-ch01",
+      "topic": "Chapter Assessment",
+      "concept_id": "mixed-powers",
+      "concept": "Combining squares and cubes",
+      "prerequisites": [],
+      "difficulty": "medium",
+      "q": "What is the value of 3³ + 2²?",
+      "options": [
+        "13",
+        "17",
+        "27",
+        "31"
+      ],
+      "answer": "31",
+      "why": "3³ = 27 and 2² = 4; 27 + 4 = 31."
+    },
+    {
+      "id": "C8M1-CA-011",
+      "grade": "Class 8",
+      "subject": "Mathematics",
+      "chapter_id": "c8-math-ch01",
+      "topic": "Chapter Assessment",
+      "concept_id": "square-area",
+      "concept": "Applying square numbers to area",
+      "prerequisites": [],
+      "difficulty": "medium",
+      "q": "A square floor has a side length of 14 m. What is its area?",
+      "options": [
+        "28 m²",
+        "56 m²",
+        "196 m²",
+        "224 m²"
+      ],
+      "answer": "196 m²",
+      "why": "Area of a square = side² = 14 × 14 = 196 m²."
+    },
+    {
+      "id": "C8M1-CA-012",
+      "grade": "Class 8",
+      "subject": "Mathematics",
+      "chapter_id": "c8-math-ch01",
+      "topic": "Chapter Assessment",
+      "concept_id": "cube-volume",
+      "concept": "Applying cubic numbers to volume",
+      "prerequisites": [],
+      "difficulty": "medium",
+      "q": "A cube has an edge length of 7 cm. What is its volume?",
+      "options": [
+        "49 cm³",
+        "147 cm³",
+        "294 cm³",
+        "343 cm³"
+      ],
+      "answer": "343 cm³",
+      "why": "Volume = edge³ = 7 × 7 × 7 = 343 cm³."
+    },
+    {
+      "id": "C8M1-CA-013",
+      "grade": "Class 8",
+      "subject": "Mathematics",
+      "chapter_id": "c8-math-ch01",
+      "topic": "Chapter Assessment",
+      "concept_id": "recognising-square-numbers",
+      "concept": "Recognising perfect squares",
+      "prerequisites": [],
+      "difficulty": "medium",
+      "q": "What is the smallest whole number whose square is greater than 80?",
+      "options": [
+        "7",
+        "8",
+        "9",
+        "10"
+      ],
+      "answer": "9",
+      "why": "8² = 64 is below 80, while 9² = 81 is greater than 80."
+    },
+    {
+      "id": "C8M1-CA-014",
+      "grade": "Class 8",
+      "subject": "Mathematics",
+      "chapter_id": "c8-math-ch01",
+      "topic": "Chapter Assessment",
+      "concept_id": "square-and-cube",
+      "concept": "Numbers that are both square and cube",
+      "prerequisites": [],
+      "difficulty": "medium",
+      "q": "Which number is both a perfect square and a perfect cube?",
+      "options": [
+        "36",
+        "64",
+        "100",
+        "144"
+      ],
+      "answer": "64",
+      "why": "64 = 8² and also 64 = 4³."
+    },
+    {
+      "id": "C8M1-CA-015",
+      "grade": "Class 8",
+      "subject": "Mathematics",
+      "chapter_id": "c8-math-ch01",
+      "topic": "Chapter Assessment",
+      "concept_id": "square-as-product",
+      "concept": "A square number as n × n",
+      "prerequisites": [],
+      "difficulty": "medium",
+      "q": "A number is 5² greater than 25. What is the number?",
+      "options": [
+        "25",
+        "40",
+        "50",
+        "75"
+      ],
+      "answer": "50",
+      "why": "5² = 25, and 25 + 25 = 50."
+    },
+    {
+      "id": "C8M1-CA-016",
+      "grade": "Class 8",
+      "subject": "Mathematics",
+      "chapter_id": "c8-math-ch01",
+      "topic": "Chapter Assessment",
+      "concept_id": "comparing-powers",
+      "concept": "Comparing square and cube numbers",
+      "prerequisites": [],
+      "difficulty": "medium",
+      "q": "By how much does 6³ exceed 7²?",
+      "options": [
+        "157",
+        "167",
+        "177",
+        "187"
+      ],
+      "answer": "167",
+      "why": "6³ = 216 and 7² = 49; 216 − 49 = 167."
+    },
+    {
+      "id": "C8M1-CA-017",
+      "grade": "Class 8",
+      "subject": "Mathematics",
+      "chapter_id": "c8-math-ch01",
+      "topic": "Chapter Assessment",
+      "concept_id": "square-number-patterns",
+      "concept": "Patterns in square numbers",
+      "prerequisites": [],
+      "difficulty": "hard",
+      "q": "The difference between two consecutive square numbers is 31. If the smaller square is 225, what is the larger square?",
+      "options": [
+        "240",
+        "250",
+        "256",
+        "264"
+      ],
+      "answer": "256",
+      "why": "225 = 15²; the next square is 16² = 256, and 256 − 225 = 31."
+    },
+    {
+      "id": "C8M1-CA-018",
+      "grade": "Class 8",
+      "subject": "Mathematics",
+      "chapter_id": "c8-math-ch01",
+      "topic": "Chapter Assessment",
+      "concept_id": "cube-roots",
+      "concept": "Finding cube roots",
+      "prerequisites": [],
+      "difficulty": "hard",
+      "q": "A cube is made from 125 identical unit cubes with no gaps. How many unit cubes lie along one edge?",
+      "options": [
+        "4",
+        "5",
+        "10",
+        "25"
+      ],
+      "answer": "5",
+      "why": "If n³ = 125, then n = 5 because 5³ = 125."
+    },
+    {
+      "id": "C8M1-CA-019",
+      "grade": "Class 8",
+      "subject": "Mathematics",
+      "chapter_id": "c8-math-ch01",
+      "topic": "Chapter Assessment",
+      "concept_id": "square-and-cube",
+      "concept": "Numbers that are both square and cube",
+      "prerequisites": [],
+      "difficulty": "hard",
+      "q": "Which is the smallest positive number greater than 1 that is both a perfect square and a perfect cube?",
+      "options": [
+        "8",
+        "16",
+        "36",
+        "64"
+      ],
+      "answer": "64",
+      "why": "A number that is both a square and cube is a sixth power; the smallest greater than 1 is 2⁶ = 64."
+    },
+    {
+      "id": "C8M1-CA-020",
+      "grade": "Class 8",
+      "subject": "Mathematics",
+      "chapter_id": "c8-math-ch01",
+      "topic": "Chapter Assessment",
+      "concept_id": "square-and-cube",
+      "concept": "Comparing square and cube numbers",
+      "prerequisites": [],
+      "difficulty": "hard",
+      "q": "A square has area 196 cm² and a cube has volume 125 cm³. How much longer is the square's side than the cube's edge?",
+      "options": [
+        "5 cm",
+        "7 cm",
+        "9 cm",
+        "11 cm"
+      ],
+      "answer": "9 cm",
+      "why": "The square's side is √196 = 14 cm. The cube's edge is ∛125 = 5 cm. The difference is 14 − 5 = 9 cm."
+    }
+  ]
+}

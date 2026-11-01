@@ -43,7 +43,7 @@ app.config['SESSION_COOKIE_SECURE'] = (
 
 SUBJECTS = [
     'Mathematics', 'Science', 'English',
-    'Social Studies', 'Hindi', 'Telugu'
+    'Social Studies', 'Hindi', 'Telugu', 'Sanskrit'
 ]
 
 # This is the website/interface preference. It is separate from R1, R2 and R3.

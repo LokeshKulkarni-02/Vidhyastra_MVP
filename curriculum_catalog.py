@@ -444,6 +444,75 @@ CURRICULUM = {
 
 
 # --------------------------------------------------
+# Vidhyastra quiz content integration v1
+# Source chapter titles: NCERT Curiosity, Grade 6 Science (NCERT 2026 catalogue).
+# Questions themselves are original Vidhyastra practice questions.
+CLASS6_SCIENCE_TITLES = [
+    "The Wonderful World of Science",
+    "Diversity in the Living World",
+    "Mindful Eating: A Path to a Healthy Body",
+    "Exploring Magnets",
+    "Measurement of Length and Motion",
+    "Materials Around Us",
+    "Temperature and its Measurement",
+    "A Journey through States of Water",
+    "Methods of Separation in Everyday Life",
+    "Living Creatures: Exploring their Characteristics",
+    "Nature’s Treasures",
+    "Beyond Earth",
+]
+
+CLASS6_SCIENCE_CHAPTERS = [
+    {
+        "id": f"c6-sci-ch{number:02d}",
+        "number": number,
+        "part": None,
+        "title": title,
+        "status": "question_bank_ready",
+        "outline": [title],
+        "learning_outcomes": [],
+        "topics": [{
+            "id": f"c6-sci-ch{number:02d}-practice",
+            "title": "Chapter Practice",
+            "practice_ready": True,
+            "chapter_assessment": True,
+            "concepts": [],
+        }],
+        "source": {
+            "textbook_portal": "https://ncert.nic.in/textbook.php?fecu1=0-12",
+        },
+    }
+    for number, title in enumerate(CLASS6_SCIENCE_TITLES, start=1)
+]
+
+CURRICULUM["Class 6"]["subjects"]["Science"] = {
+    "textbook": "Curiosity, Grade 6 Science",
+    "edition": "NCERT 2026 catalogue; confirm the edition prescribed by the school",
+    "chapters": CLASS6_SCIENCE_CHAPTERS,
+}
+
+# Preserve the existing Class 8 Square Numbers and Cubic Numbers topic quizzes.
+# Add a separate 20-question chapter-wide assessment for the full chapter.
+_class8_chapter = CURRICULUM["Class 8"]["subjects"]["Mathematics"]["chapters"][0]
+_class8_topics = _class8_chapter.get("topics", [])
+_class8_concepts = {}
+for _old_topic in _class8_topics:
+    if _old_topic.get("title") in ("Square Numbers", "Cubic Numbers"):
+        _old_topic["practice_ready"] = True
+        _old_topic["chapter_assessment"] = False
+        for _concept in _old_topic.get("concepts", []):
+            _class8_concepts.setdefault(_concept.get("id"), _concept)
+
+if not any(_topic.get("title") == "Chapter Assessment" for _topic in _class8_topics):
+    _class8_topics.append({
+        "id": "c8-math-ch01-chapter-assessment",
+        "title": "Chapter Assessment",
+        "practice_ready": True,
+        "chapter_assessment": True,
+        "concepts": list(_class8_concepts.values()),
+    })
+_class8_chapter["topics"] = _class8_topics
+
 # PUBLIC HELPER FUNCTIONS
 # --------------------------------------------------
 
