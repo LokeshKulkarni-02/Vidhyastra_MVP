@@ -22,6 +22,7 @@ from language_curriculum import (
 )
 
 from question_bank import get_topic_questions
+from leaderboard_policy import performance_category, position_counts, rank_records
 
 # ==================================================
 # APPLICATION CONFIGURATION
@@ -753,18 +754,8 @@ def award_quiz_xp(student_id, subject, con):
 
 
 def student_performance_category(accuracy_percent, total_attempts):
-    """Return a supportive category based on all recorded quiz attempts."""
-    if total_attempts <= 0:
-        return "Not assessed yet"
-    if accuracy_percent < 40:
-        return "Foundation Builder"
-    if accuracy_percent < 60:
-        return "Developing Learner"
-    if accuracy_percent < 80:
-        return "Proficient Learner"
-    if accuracy_percent < 90:
-        return "Advanced Learner"
-    return "Mastery Learner"
+    """Return the consistent A/B/C band used by students and teachers."""
+    return performance_category(accuracy_percent, total_attempts)
 
 
 def get_class_leaderboard(
@@ -1384,6 +1375,9 @@ def dashboard():
             )
 
             my_rank = my_entry['rank'] if my_entry else 1
+            students_ahead_count, students_behind_count = position_counts(
+                len(leaderboard), my_entry['rank'] if my_entry else None
+            )
             xp_to_next_rank = None
             correct_answers_to_next_rank = None
 
@@ -1420,15 +1414,17 @@ def dashboard():
                 ticket_history=ticket_history,
                 subject_xp=subject_xp,
                 total_xp=total_xp,
-                leaderboard=leaderboard,
+                leaderboard=([dict(my_entry)] if my_entry else []),
                 my_rank=my_rank,
                 xp_to_next_rank=xp_to_next_rank,
                 correct_answers_to_next_rank=correct_answers_to_next_rank,
                 xp_to_first_place=xp_to_first_place,
                 correct_answers_to_first_place=correct_answers_to_first_place,
                 is_first_place=is_first_place,
-                student_ahead=student_ahead,
-                student_behind=student_behind,
+                student_ahead=({'xp_diff': student_ahead['xp_diff']} if student_ahead else None),
+                student_behind=None,
+                students_ahead_count=students_ahead_count,
+                students_behind_count=students_behind_count,
                 lb_subject=lb_subject
             )
 
@@ -1527,6 +1523,26 @@ def dashboard():
                     u.id, u.name, u.roll_no, u.grade, u.board, a.subject
                 ORDER BY u.grade, u.name, a.subject
             ''', params).fetchall()
+
+            students = [dict(row) for row in students]
+            rank_groups = {}
+            for student_row in students:
+                xp_row = con.execute(
+                    'SELECT xp FROM student_xp WHERE student_id=? AND subject=?',
+                    (student_row['id'], student_row['subject'])
+                ).fetchone()
+                student_row['rank_xp'] = xp_row['xp'] if xp_row else 0
+                rank_key = (
+                    student_row['grade'],
+                    student_row['board'],
+                    student_row['subject']
+                )
+                rank_groups.setdefault(rank_key, []).append(student_row)
+
+            for group_rows in rank_groups.values():
+                ranks = rank_records(group_rows, score_key='rank_xp', id_key='id')
+                for student_row in group_rows:
+                    student_row['rank'] = ranks[student_row['id']]
 
             tickets = con.execute('''
                 SELECT t.*, s.name AS student_name
@@ -2483,6 +2499,9 @@ def quiz():
             )
 
             my_rank = my_entry['rank'] if my_entry else 1
+            students_ahead_count, students_behind_count = position_counts(
+                len(leaderboard), my_entry['rank'] if my_entry else None
+            )
 
             # Score the current 20-question topic cycle as one assessment.
             topic_attempt_total = con.execute('''
@@ -2539,8 +2558,10 @@ def quiz():
             new_subject_xp=new_subject_xp,
             new_total_xp=new_total_xp,
             my_rank=my_rank,
-            student_ahead=student_ahead,
-            student_behind=student_behind,
+            student_ahead=({'xp_diff': student_ahead['xp_diff']} if student_ahead else None),
+            student_behind=None,
+            students_ahead_count=students_ahead_count,
+            students_behind_count=students_behind_count,
             assessment_attempts=assessment_attempts,
             assessment_correct=assessment_correct,
             assessment_percent=assessment_percent,

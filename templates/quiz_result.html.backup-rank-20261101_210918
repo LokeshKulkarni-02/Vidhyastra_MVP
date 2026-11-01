@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+
+{% block title %}Practice result · Vidhyastra{% endblock %}
+
+{% block content %}
+
+<section class="result-wrap">
+    <div class="result-icon {% if correct %}success-icon{% else %}review-icon{% endif %}">
+        {% if correct %}✓{% else %}↻{% endif %}
+    </div>
+
+    <span class="eyebrow">{{ subject }} · {{ topic }}</span>
+
+    <h1>{% if correct %}Nice work!{% else %}Let's learn from this one.{% endif %}</h1>
+
+    {% if correct %}
+    <!-- CELEBRATORY XP GAIN BANNER -->
+    <div class="xp-reward-card">
+        <div class="xp-reward-left">
+            <span class="xp-reward-icon">⚡</span>
+            <div>
+                <strong>+{{ xp_earned }} XP Earned in {{ subject }}!</strong>
+                <small>New {{ subject }} XP: {{ new_subject_xp }} XP · Total XP: {{ new_total_xp }} XP</small>
+            </div>
+        </div>
+
+        <div class="xp-reward-right">
+            <span class="pill rank-pill">Rank #{{ my_rank }} in {{ user['grade'] or 'Class' }}</span>
+            {% if student_ahead %}
+            <small class="xp-hint">🔥 Only <b>{{ student_ahead.xp_diff }} XP</b> to pass {{ student_ahead.name }}!</small>
+            {% elif my_rank == 1 %}
+            <small class="xp-hint">👑 You're #1 in {{ user['grade'] or 'Class' }}!</small>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="panel result-panel">
+        <h3>{{ question.q }}</h3>
+        {% if question.concept %}
+        <p class="tiny-note">Concept checked: {{ question.concept }} · Difficulty: {{ question.difficulty|capitalize }}</p>
+        {% endif %}
+        <p>Your answer: <b>{{ selected }}</b></p>
+        <p>Correct answer: <b>{{ question.answer }}</b></p>
+
+        <div class="explanation">
+            <b>Why?</b>
+            <p>{{ question.why }}</p>
+        </div>
+    </div>
+
+    <section class="panel" style="margin: 20px 0;">
+        <span class="eyebrow">TOPIC ASSESSMENT</span>
+        <h2>{{ assessment_attempts }} / {{ assessment_total }} questions completed</h2>
+        <p>{{ assessment_correct }} correct · {{ assessment_percent }}% accuracy so far</p>
+        {% if assessment_complete %}
+        <h3>Your category: {{ assessment_category }}</h3>
+        <p class="muted">You completed all 20 questions in this topic: 8 easy, 8 medium and 4 hard.</p>
+        {% else %}
+        <p class="muted">Continue with the next question. Your topic category is shown after all 20 questions are completed.</p>
+        {% endif %}
+    </section>
+
+    <p class="result-note">
+        {% if correct %}
+        Your progress and XP have been updated! Keep trying more questions to climb higher on your class leaderboard.
+        {% else %}
+        One mistake doesn't define your ability. Review the explanation above, then try again or ask your study buddy for help!
+        {% endif %}
+    </p>
+
+    <div class="hero-actions centered">
+        <a class="button primary" href="{{ url_for('quiz', subject=subject, topic=topic, chapter_id=chapter_id) }}">
+            Try another question →
+        </a>
+        <a class="button secondary" href="{{ url_for('assistant') }}">
+            Ask study buddy
+        </a>
+        <a class="button dark" href="{{ url_for('dashboard') }}#leaderboard">
+            View Class Leaderboard 🏆
+        </a>
+    </div>
+</section>
+
+{% endblock %}

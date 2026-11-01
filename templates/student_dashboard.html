@@ -116,8 +116,8 @@
         {% endif %}
     </div>
     <p class="tiny-note">
-        Categories: 0–39% Foundation Builder · 40–59% Developing Learner ·
-        60–79% Proficient Learner · 80–89% Advanced Learner · 90–100% Mastery Learner.
+        Categories: A = 80–100% · B = 60–79% · C = below 60%.
+        These are practice indicators, not permanent labels or formal school grades.
     </p>
 </section>
 
@@ -347,89 +347,19 @@
 </section>
 
 
-<!-- LEADERBOARD TARGETS -->
-
-<div class="lb-targets" aria-label="Leaderboard goals">
-
+<!-- PRIVATE STUDENT RANK SUMMARY -->
+<div class="lb-targets" aria-label="Your rank summary">
     <div class="lb-target">
-
-        <span>Next position</span>
-
-        {% if student_ahead and xp_to_next_rank is not none %}
-
-            <strong>{{ xp_to_next_rank }} XP</strong>
-
-            <small>
-                {{ correct_answers_to_next_rank }}
-                correct answer{% if correct_answers_to_next_rank != 1 %}s{% endif %}
-                needed to reach the next position
-            </small>
-
-        {% elif is_first_place %}
-
-            <strong>First place</strong>
-
-            <small>
-                You are already at the top!
-            </small>
-
-        {% elif leaderboard and not is_first_place and xp_to_next_rank is none and xp_to_first_place is none %}
-
-            <strong>Keep practising</strong>
-
-            <small>
-                Your leaderboard position will appear here.
-            </small>
-
-        {% else %}
-
-            <strong>No position above you</strong>
-
-            <small>
-                Continue practising to build your score.
-            </small>
-
-        {% endif %}
-
+        <span>Your rank</span>
+        <strong>{% if leaderboard %}#{{ my_rank }}{% else %}Not ranked yet{% endif %}</strong>
+        <small>Within your school, class, board and selected leaderboard.</small>
     </div>
-
-
     <div class="lb-target">
-
-        <span>First place</span>
-
-        {% if is_first_place %}
-
-            <strong>Reached</strong>
-
-            <small>
-                You are currently in first place.
-            </small>
-
-        {% elif xp_to_first_place is not none %}
-
-            <strong>{{ xp_to_first_place }} XP</strong>
-
-            <small>
-                {{ correct_answers_to_first_place }}
-                correct answer{% if correct_answers_to_first_place != 1 %}s{% endif %}
-                needed to reach first place
-            </small>
-
-        {% else %}
-
-            <strong>Not ranked</strong>
-
-            <small>
-                A leaderboard position is not available yet.
-            </small>
-
-        {% endif %}
-
+        <span>Classmates around you</span>
+        <strong>{{ students_ahead_count }} ahead · {{ students_behind_count }} behind</strong>
+        <small>Only your own position is shown here; classmates' identities and ranks are private.</small>
     </div>
-
 </div>
-
 
 <!-- LEADERBOARD TABLE -->
 

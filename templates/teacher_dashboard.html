@@ -73,8 +73,8 @@
     <article class="stat-card">
         <span class="stat-icon orange">⌁</span>
         <small>Needs review · C</small>
-        <strong>{{ students|selectattr('accuracy', 'lt', 50)|list|length }}</strong>
-        <span class="muted">Below 50% or no evidence</span>
+        <strong>{{ students|selectattr('accuracy', 'lt', 60)|list|length }}</strong>
+        <span class="muted">Below 60% or no evidence</span>
     </article>
 
 </section>
@@ -106,6 +106,7 @@
         <div class="student-mini">
             <b>{{ s.name }}</b>
             <small>{{ s.grade }} · {{ s.subject }} · {{ s.accuracy }}%</small>
+            <small class="muted">Rank #{{ s.rank }} · {{ s.rank_xp }} XP</small>
             <a href="{{ url_for('report', student_id=s.id) }}">View ↗</a>
         </div>
 
@@ -123,15 +124,16 @@
             <span>B</span>
             <div>
                 <h3>Building confidence</h3>
-                <small>50–79% recent accuracy</small>
+                <small>60–79% recent accuracy</small>
             </div>
         </div>
 
-        {% for s in students if s.accuracy >= 50 and s.accuracy < 80 %}
+        {% for s in students if s.accuracy >= 60 and s.accuracy < 80 %}
 
         <div class="student-mini">
             <b>{{ s.name }}</b>
             <small>{{ s.grade }} · {{ s.subject }} · {{ s.accuracy }}%</small>
+            <small class="muted">Rank #{{ s.rank }} · {{ s.rank_xp }} XP</small>
             <a href="{{ url_for('report', student_id=s.id) }}">View ↗</a>
         </div>
 
@@ -149,15 +151,16 @@
             <span>C</span>
             <div>
                 <h3>Needs adaptation</h3>
-                <small>Below 50% or no evidence</small>
+                <small>Below 60% or no evidence</small>
             </div>
         </div>
 
-        {% for s in students if s.accuracy < 50 %}
+        {% for s in students if s.accuracy < 60 %}
 
         <div class="student-mini">
             <b>{{ s.name }}</b>
             <small>{{ s.grade }} · {{ s.subject }} · {{ s.accuracy }}%</small>
+            <small class="muted">Rank #{{ s.rank }} · {{ s.rank_xp }} XP</small>
             <a href="{{ url_for('report', student_id=s.id) }}">View ↗</a>
         </div>
 

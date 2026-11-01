@@ -13,6 +13,13 @@
 
     <h1>{% if correct %}Nice work!{% else %}Let's learn from this one.{% endif %}</h1>
 
+    <section class="panel" style="margin: 18px 0;">
+        <span class="eyebrow">YOUR CLASS POSITION</span>
+        <h2>Rank #{{ my_rank }}</h2>
+        <p>{{ students_ahead_count }} students ahead · {{ students_behind_count }} students behind you.</p>
+        <p class="muted">Other students' names, scores and ranks are visible only in the teacher workspace.</p>
+    </section>
+
     {% if correct %}
     <!-- CELEBRATORY XP GAIN BANNER -->
     <div class="xp-reward-card">
@@ -27,7 +34,7 @@
         <div class="xp-reward-right">
             <span class="pill rank-pill">Rank #{{ my_rank }} in {{ user['grade'] or 'Class' }}</span>
             {% if student_ahead %}
-            <small class="xp-hint">🔥 Only <b>{{ student_ahead.xp_diff }} XP</b> to pass {{ student_ahead.name }}!</small>
+            <small class="xp-hint">{{ students_ahead_count }} students ahead · {{ students_behind_count }} students behind you.</small>
             {% elif my_rank == 1 %}
             <small class="xp-hint">👑 You're #1 in {{ user['grade'] or 'Class' }}!</small>
             {% endif %}
