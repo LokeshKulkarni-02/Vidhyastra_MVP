@@ -91,7 +91,7 @@
                 <select name="third_language" id="third-language">
                     <option value="">Select R1 and R2 first</option>
                 </select>
-                <small>For Classes 6–8 only when R2 is Hindi. R3 is Sanskrit.</small>
+                <small id="third-language-help">Classes 6–8: R2 Telugu → R3 Hindi; R2 Hindi → R3 Telugu or Sanskrit. No R3 in Classes 9–10.</small>
             </label>
         </div>
         {% endif %}
@@ -136,6 +136,7 @@
     const r2Select = document.getElementById('second-language');
     const r3Select = document.getElementById('third-language');
     const r3Wrap = document.getElementById('third-language-wrap');
+    const r3Help = document.getElementById('third-language-help');
     const initialR3 = {{ (user['third_language'] or '')|tojson }};
 
     function classNumber() {
@@ -167,8 +168,12 @@
     function updateThirdLanguage(preserveSelection = true) {
         const previous = preserveSelection ? r3Select.value : initialR3;
         const grade = classNumber();
-        const shouldShow = grade >= 6 && grade <= 8 &&
-            r2Select.value === 'Hindi';
+        const r3Choices = {
+            Telugu: ['Hindi'],
+            Hindi: ['Telugu', 'Sanskrit']
+        };
+        const choices = r3Choices[r2Select.value] || [];
+        const shouldShow = grade >= 6 && grade <= 8 && choices.length > 0;
 
         r3Wrap.classList.toggle('hidden', !shouldShow);
         r3Select.disabled = !shouldShow;
@@ -179,16 +184,25 @@
             r3Select.value = '';
             const placeholder = document.createElement('option');
             placeholder.value = '';
-            placeholder.textContent = 'R3 is available only when R2 is Hindi';
+            placeholder.textContent = 'R3 is available only in Classes 6–8';
             r3Select.appendChild(placeholder);
+            r3Help.textContent = 'Classes 6–8 only. Classes 9–10 do not have R3 in this MVP.';
             return;
         }
 
-        const option = document.createElement('option');
-        option.value = 'Sanskrit';
-        option.textContent = 'Sanskrit';
-        r3Select.appendChild(option);
-        r3Select.value = previous === 'Sanskrit' ? previous : 'Sanskrit';
+        choices.forEach((language) => {
+            const option = document.createElement('option');
+            option.value = language;
+            option.textContent = language;
+            r3Select.appendChild(option);
+        });
+
+        r3Select.value = choices.includes(previous) ? previous : choices[0];
+        if (r2Select.value === 'Telugu') {
+            r3Help.textContent = 'Because R2 is Telugu, Hindi is the only R3 option.';
+        } else {
+            r3Help.textContent = 'Because R2 is Hindi, choose Telugu or Sanskrit as R3.';
+        }
     }
 
     r1Select.addEventListener('change', () => updateSecondLanguage(false));
