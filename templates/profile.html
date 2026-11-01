@@ -1,11 +1,8 @@
-
 {% extends 'base.html' %}
 {% block title %}Profile · Vidhyastra{% endblock %}
 
 {% block content %}
-
 <section class="form-page">
-
     <div class="page-heading">
         <span class="eyebrow">YOUR SPACE</span>
         <h1>Profile & preferences</h1>
@@ -14,24 +11,23 @@
 
     <div class="panel profile-summary">
         <div class="avatar big">{{ user['name'][:1] }}</div>
-
         <div>
             <h2>{{ user['name'] }}</h2>
             <p>{{ user['email'] }} · {{ user['phone'] }}</p>
             <span class="pill">{{ user['role']|title }}</span>
-
             {% if user['roll_no'] %}
             <p class="muted">Roll number: {{ user['roll_no'] }}</p>
+            {% endif %}
+            {% if user['role'] == 'student' %}
+            <p class="muted">{{ user['grade'] }} · {{ user['board'] }}</p>
             {% endif %}
         </div>
     </div>
 
     <form class="form-card wide" method="post">
-
         <h2>Customize your space</h2>
 
         <div class="form-grid">
-
             <label>Interface theme
                 <select name="theme">
                     <option value="light" {% if user['theme']=='light' %}selected{% endif %}>Light</option>
@@ -39,41 +35,76 @@
                 </select>
             </label>
 
-            <label>Preferred language
+            <label>Preferred interface language
                 <select name="language">
-                    {% for l in ['English','Hindi','Telugu','Urdu','Tamil','Kannada','Marathi','Bengali'] %}
-                    <option {% if user['language']==l %}selected{% endif %}>
-                        {{ l }}
+                    {% for language in ['English', 'Hindi', 'Telugu', 'Urdu', 'Tamil', 'Kannada', 'Marathi', 'Bengali'] %}
+                    <option value="{{ language }}" {% if user['language']==language %}selected{% endif %}>
+                        {{ language }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <small>This is saved separately from R1, R2 and R3. Full page translation is not part of this MVP.</small>
+            </label>
+
+            {% if user['role'] == 'student' %}
+            <label>Study buddy name
+                <input name="bot_name" value="{{ user['bot_name'] }}" maxlength="30">
+            </label>
+            {% else %}
+            <input type="hidden" name="bot_name" value="{{ user['bot_name'] }}">
+            {% endif %}
+        </div>
+
+        {% if user['role'] == 'student' %}
+        <div class="section-divider">
+            <span>Curriculum language subjects</span>
+            <small>These selections do not change the website interface language.</small>
+        </div>
+
+        <div class="form-grid" id="student-language-settings"
+             data-grade="{{ user['grade'] }}">
+            <label>First language (R1)
+                <select name="first_language" id="first-language" required>
+                    <option value="">Select R1</option>
+                    {% for language in ['English', 'Telugu', 'Hindi'] %}
+                    <option value="{{ language }}" {% if user['first_language']==language %}selected{% endif %}>
+                        {{ language }}
                     </option>
                     {% endfor %}
                 </select>
             </label>
 
-            {% if user['role']=='student' %}
-
-            <label>Study buddy name
-                <input name="bot_name" value="{{ user['bot_name'] }}" maxlength="30">
+            <label>Second language (R2)
+                <select name="second_language" id="second-language" required>
+                    <option value="">Select R2</option>
+                    {% for language in ['Telugu', 'Hindi'] if language != user['first_language'] %}
+                    <option value="{{ language }}" {% if user['second_language']==language %}selected{% endif %}>
+                        {{ language }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <small>R2 must be Telugu or Hindi and must differ from R1.</small>
             </label>
 
-            {% else %}
-
-            <input type="hidden" name="bot_name" value="{{ user['bot_name'] }}">
-
-            {% endif %}
-
+            <label id="third-language-wrap" class="hidden">
+                Third language (R3)
+                <select name="third_language" id="third-language">
+                    <option value="">Select R1 and R2 first</option>
+                </select>
+                <small>Enabled for Classes 6–8 only. The suggested default follows the MVP rules.</small>
+            </label>
         </div>
+        {% endif %}
 
         <hr>
 
         <h2>Change password</h2>
-
         <p class="muted">
             Use this if your school administrator gave you a temporary password,
             or if you are still using an old demo password.
         </p>
 
         <div class="form-grid">
-
             <label>Current password
                 <input name="current_password" type="password" autocomplete="current-password">
             </label>
@@ -85,13 +116,9 @@
             <label>Confirm new password
                 <input name="confirm_password" type="password" minlength="8" autocomplete="new-password">
             </label>
-
         </div>
 
-        <button class="button primary" type="submit">
-            Save changes
-        </button>
-
+        <button class="button primary" type="submit">Save changes</button>
     </form>
 
     <div class="notice">
@@ -99,7 +126,94 @@
         linked parent and teachers assigned by the same school,
         subject to this prototype's access controls.
     </div>
-
 </section>
 
+{% if user['role'] == 'student' %}
+<script>
+(() => {
+    const settings = document.getElementById('student-language-settings');
+    const r1Select = document.getElementById('first-language');
+    const r2Select = document.getElementById('second-language');
+    const r3Select = document.getElementById('third-language');
+    const r3Wrap = document.getElementById('third-language-wrap');
+    const initialR3 = {{ (user['third_language'] or '')|tojson }};
+
+    function classNumber() {
+        const match = (settings.dataset.grade || '').match(/\d+/);
+        return match ? Number(match[0]) : 0;
+    }
+
+    function updateSecondLanguage(preserveSelection = true) {
+        const previous = preserveSelection ? r2Select.value : '';
+        const choices = ['Telugu', 'Hindi'].filter((value) => value !== r1Select.value);
+
+        r2Select.innerHTML = '';
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = 'Select R2';
+        r2Select.appendChild(placeholder);
+
+        choices.forEach((language) => {
+            const option = document.createElement('option');
+            option.value = language;
+            option.textContent = language;
+            r2Select.appendChild(option);
+        });
+
+        r2Select.value = choices.includes(previous) ? previous : '';
+        updateThirdLanguage(false);
+    }
+
+    function updateThirdLanguage(preserveSelection = true) {
+        const previous = preserveSelection ? r3Select.value : initialR3;
+        const grade = classNumber();
+        const shouldShow = grade >= 6 && grade <= 8 &&
+            Boolean(r1Select.value) && Boolean(r2Select.value);
+
+        r3Wrap.classList.toggle('hidden', !shouldShow);
+        r3Select.disabled = !shouldShow;
+        r3Select.required = shouldShow;
+        r3Select.innerHTML = '';
+
+        if (!shouldShow) {
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = 'R3 is only used for Classes 6–8';
+            r3Select.appendChild(placeholder);
+            return;
+        }
+
+        let choices = r2Select.value === 'Telugu'
+            ? ['Hindi', 'Sanskrit']
+            : ['Telugu', 'Sanskrit'];
+        choices = choices.filter((value) =>
+            value !== r1Select.value && value !== r2Select.value
+        );
+
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = 'Select R3';
+        r3Select.appendChild(placeholder);
+
+        choices.forEach((language) => {
+            const option = document.createElement('option');
+            option.value = language;
+            option.textContent = language;
+            r3Select.appendChild(option);
+        });
+
+        const preferred = r2Select.value === 'Telugu' ? 'Hindi' : 'Telugu';
+        r3Select.value = choices.includes(previous)
+            ? previous
+            : (choices.includes(preferred) ? preferred : (choices[0] || ''));
+    }
+
+    r1Select.addEventListener('change', () => updateSecondLanguage(false));
+    r2Select.addEventListener('change', () => updateThirdLanguage(false));
+
+    updateSecondLanguage(true);
+    updateThirdLanguage(true);
+})();
+</script>
+{% endif %}
 {% endblock %}

@@ -19,7 +19,6 @@ from language_curriculum import (
     get_default_r3,
     get_r3_options,
     validate_language_selection,
-    get_r3_curriculum_info,
 )
 
 from question_bank import get_topic_questions
@@ -46,6 +45,12 @@ SUBJECTS = [
     'Mathematics', 'Science', 'English',
     'Social Studies', 'Hindi', 'Telugu'
 ]
+
+# This is the website/interface preference. It is separate from R1, R2 and R3.
+INTERFACE_LANGUAGES = (
+    'English', 'Hindi', 'Telugu', 'Urdu',
+    'Tamil', 'Kannada', 'Marathi', 'Bengali'
+)
 
 BASE_XP_PER_SUBJECT = 0
 CORRECT_ANSWER_XP = 5
@@ -158,27 +163,18 @@ def grade_number(grade):
 
 
 def language_choices_for_student(grade, first_language, second_language):
-    """Return R3 choices for the current Vidhyastra MVP rules."""
+    """Return R3 choices only for Classes 6–8 using the shared MVP rules."""
     number = grade_number(grade)
-    if number < 6 or number > 8:
+    if number not in (6, 7, 8):
         return []
-    choices = (
-        ["Hindi", "Sanskrit"] if second_language == "Telugu"
-        else ["Telugu", "Sanskrit"] if second_language == "Hindi"
-        else []
-    )
-    return [
-        item for item in choices
-        if item not in (first_language, second_language)
-    ]
+    return get_r3_options(first_language, second_language)
 
 
 def default_r3_for_student(grade, first_language, second_language):
-    choices = language_choices_for_student(
-        grade, first_language, second_language
-    )
-    preferred = "Hindi" if second_language == "Telugu" else "Telugu"
-    return preferred if preferred in choices else (choices[0] if choices else "")
+    """Return the preferred valid R3 choice for Classes 6–8."""
+    if grade_number(grade) not in (6, 7, 8):
+        return ''
+    return get_default_r3(first_language, second_language)
 
 
 def db():
@@ -1048,44 +1044,43 @@ def register():
             )
             return redirect(url_for('register'))
 
-        first_language = form.get('first_language', 'English').strip()
+        first_language = form.get('first_language', '').strip()
         second_language = form.get('second_language', '').strip()
         third_language = form.get('third_language', '').strip()
         grade_value = form.get('grade', '').strip()
-
-        if first_language not in ('English', 'Telugu', 'Hindi'):
-            flash('Choose a valid first language.', 'error')
-            return redirect(url_for('register'))
-        if second_language not in ('Telugu', 'Hindi'):
-            flash('Choose Telugu or Hindi as your second language.', 'error')
-            return redirect(url_for('register'))
-        if first_language == second_language:
-            flash('Your second language must be different from your first language.', 'error')
-            return redirect(url_for('register'))
-
         class_no = grade_number(grade_value)
+
+        if class_no not in range(5, 11):
+            flash('Choose a class from Class 5 to Class 10.', 'error')
+            return redirect(url_for('register'))
+
+        # Class 5 has R1 and R2 only. Classes 6–8 also require a valid R3.
         if class_no == 5:
             third_language = ''
-        elif 6 <= class_no <= 8:
-            allowed_r3 = language_choices_for_student(
+        elif 6 <= class_no <= 8 and not third_language:
+            third_language = default_r3_for_student(
                 grade_value, first_language, second_language
             )
-            if not allowed_r3:
+        elif class_no >= 9:
+            third_language = ''
+
+        if 5 <= class_no <= 8:
+            valid_languages, language_error = validate_language_selection(
+                grade_value, first_language, second_language, third_language
+            )
+            if not valid_languages:
+                flash(language_error, 'error')
+                return redirect(url_for('register'))
+        else:
+            if first_language not in ('English', 'Telugu', 'Hindi'):
+                flash('Choose a valid first language.', 'error')
+                return redirect(url_for('register'))
+            if second_language not in ('Telugu', 'Hindi') or second_language == first_language:
                 flash(
-                    'No valid third-language option is available. '
-                    'Please change your first or second language.',
+                    'Choose Telugu or Hindi as R2, different from R1.',
                     'error'
                 )
                 return redirect(url_for('register'))
-            if not third_language:
-                third_language = default_r3_for_student(
-                    grade_value, first_language, second_language
-                )
-            if third_language not in allowed_r3:
-                flash('Choose a valid third language for your class.', 'error')
-                return redirect(url_for('register'))
-        else:
-            third_language = ''
 
     con = db()
 
@@ -1111,6 +1106,10 @@ def register():
             else None
         )
 
+        interface_language = form.get('language', 'English').strip()
+        if interface_language not in INTERFACE_LANGUAGES:
+            interface_language = 'English'
+
         cursor = con.execute('''
             INSERT INTO users (
                 name, email, phone, password_hash, role,
@@ -1118,7 +1117,7 @@ def register():
                 language, first_language, second_language, third_language,
                 roll_no, school_id, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             name,
             email,
@@ -1130,7 +1129,7 @@ def register():
             form.get('state', '').strip(),
             form.get('board', '').strip(),
             form.get('grade', '').strip(),
-            form.get('language', 'English'),
+            interface_language,
             first_language if role == 'student' else 'English',
             second_language if role == 'student' else '',
             third_language if role == 'student' else '',
@@ -1962,8 +1961,8 @@ def profile():
             if theme not in ('light', 'dark'):
                 theme = 'light'
 
-            ui_language = request.form.get('language', 'English')
-            if ui_language not in ('English', 'Telugu', 'Hindi'):
+            ui_language = request.form.get('language', 'English').strip()
+            if ui_language not in INTERFACE_LANGUAGES:
                 ui_language = 'English'
 
             first_language = request.form.get(
@@ -1981,38 +1980,39 @@ def profile():
                 for key in ('first_language', 'second_language', 'third_language')
             ):
                 class_no = grade_number(user['grade'])
-                if (
-                    first_language not in ('English', 'Telugu', 'Hindi')
-                    or second_language not in ('Telugu', 'Hindi')
-                    or first_language == second_language
-                ):
-                    flash(
-                        'Please choose valid, different first and second languages.',
-                        'error'
-                    )
-                    return redirect(url_for('profile'))
 
                 if class_no == 5:
                     third_language = ''
-                elif 6 <= class_no <= 8:
-                    allowed_r3 = language_choices_for_student(
+                elif 6 <= class_no <= 8 and not third_language:
+                    third_language = default_r3_for_student(
                         user['grade'], first_language, second_language
                     )
-                    if not allowed_r3:
+                elif class_no >= 9:
+                    third_language = ''
+
+                if 5 <= class_no <= 8:
+                    valid_languages, language_error = validate_language_selection(
+                        user['grade'],
+                        first_language,
+                        second_language,
+                        third_language
+                    )
+                    if not valid_languages:
+                        flash(language_error, 'error')
+                        return redirect(url_for('profile'))
+                else:
+                    if first_language not in ('English', 'Telugu', 'Hindi'):
+                        flash('Choose a valid first language.', 'error')
+                        return redirect(url_for('profile'))
+                    if (
+                        second_language not in ('Telugu', 'Hindi')
+                        or second_language == first_language
+                    ):
                         flash(
-                            'No valid third-language option is available.',
+                            'Choose Telugu or Hindi as R2, different from R1.',
                             'error'
                         )
                         return redirect(url_for('profile'))
-                    if not third_language:
-                        third_language = default_r3_for_student(
-                            user['grade'], first_language, second_language
-                        )
-                    if third_language not in allowed_r3:
-                        flash('Please choose a valid third language.', 'error')
-                        return redirect(url_for('profile'))
-                else:
-                    third_language = ''
 
             con.execute('''
                 UPDATE users
@@ -2149,7 +2149,7 @@ def curriculum():
     if not user:
         abort(403)
 
-    curriculum_data = get_mvp_grade_curriculum(user['grade'])
+    curriculum_data = get_mvp_grade_curriculum(user['grade'], user=user)
     class_no = grade_number(user['grade'])
     r3_bridge_note = ''
     if class_no in (6, 7, 8) and user['third_language']:

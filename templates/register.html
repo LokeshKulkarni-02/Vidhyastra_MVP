@@ -1,4 +1,3 @@
-
 {% extends 'base.html' %}
 {% block title %}Create account · Vidhyastra{% endblock %}
 
@@ -12,7 +11,6 @@
 
     <form class="form-card wide" method="post">
         <div class="form-grid">
-
             <label>Full name
                 <input name="name" required maxlength="100" autocomplete="name">
             </label>
@@ -42,19 +40,14 @@
                 <small>Ask your school administrator for this code.</small>
             </label>
 
-            <label>Preferred language
+            <label>Preferred interface language
                 <select name="language">
-                    <option>English</option>
-                    <option>Hindi</option>
-                    <option>Telugu</option>
-                    <option>Urdu</option>
-                    <option>Tamil</option>
-                    <option>Kannada</option>
-                    <option>Marathi</option>
-                    <option>Bengali</option>
+                    {% for language in ['English', 'Hindi', 'Telugu', 'Urdu', 'Tamil', 'Kannada', 'Marathi', 'Bengali'] %}
+                    <option value="{{ language }}" {% if language == 'English' %}selected{% endif %}>{{ language }}</option>
+                    {% endfor %}
                 </select>
+                <small>This is saved separately from R1, R2 and R3. Full page translation is not part of this MVP.</small>
             </label>
-
         </div>
 
         <div id="student-fields">
@@ -64,21 +57,20 @@
             </div>
 
             <div class="form-grid">
-
                 <label>Region
-                    <input name="region" placeholder="e.g. South India">
+                    <input name="region" placeholder="e.g. South India" required>
                 </label>
 
                 <label>District
-                    <input name="district" placeholder="Your district">
+                    <input name="district" placeholder="Your district" required>
                 </label>
 
                 <label>State / UT
-                    <input name="state" placeholder="e.g. Telangana">
+                    <input name="state" placeholder="e.g. Telangana" required>
                 </label>
 
                 <label>Board of education
-                    <select name="board">
+                    <select name="board" required>
                         <option value="">Select board</option>
                         <option>CBSE</option>
                         <option>ICSE</option>
@@ -90,18 +82,46 @@
                 </label>
 
                 <label>Class
-                    <select name="grade">
+                    <select name="grade" id="grade" required>
                         <option value="">Select class</option>
-                        {% for g in range(6,11) %}
-                        <option>Class {{ g }}</option>
+                        {% for g in range(5, 11) %}
+                        <option value="Class {{ g }}">Class {{ g }}</option>
                         {% endfor %}
                     </select>
                 </label>
 
+                <label>First language (R1)
+                    <select name="first_language" id="first-language" required>
+                        <option value="">Select R1</option>
+                        <option value="English">English</option>
+                        <option value="Telugu">Telugu</option>
+                        <option value="Hindi">Hindi</option>
+                    </select>
+                    <small>Choose English, Telugu or Hindi.</small>
+                </label>
+
+                <label>Second language (R2)
+                    <select name="second_language" id="second-language" required>
+                        <option value="">Select R1 first</option>
+                    </select>
+                    <small>R2 is Telugu or Hindi and must differ from R1.</small>
+                </label>
+
+                <label id="third-language-wrap" class="hidden">
+                    Third language (R3)
+                    <select name="third_language" id="third-language" disabled>
+                        <option value="">Select R1 and R2 first</option>
+                    </select>
+                    <small>For Classes 6–8. The suggested default follows the MVP language rules.</small>
+                </label>
             </div>
         </div>
 
         <div id="parent-fields" class="hidden">
+            <div class="section-divider">
+                <span>Parent / guardian details</span>
+                <small>Link a student account if you already have the roll number</small>
+            </div>
             <label>Student roll number (optional)
                 <input name="child_roll" placeholder="e.g. VDS-A1B2C3">
                 <small>The roll number must belong to a student in the same school.</small>
@@ -122,4 +142,111 @@
         </p>
     </form>
 </section>
+
+<script>
+(() => {
+    const roleSelect = document.getElementById('role');
+    const studentFields = document.getElementById('student-fields');
+    const parentFields = document.getElementById('parent-fields');
+    const gradeSelect = document.getElementById('grade');
+    const r1Select = document.getElementById('first-language');
+    const r2Select = document.getElementById('second-language');
+    const r3Select = document.getElementById('third-language');
+    const r3Wrap = document.getElementById('third-language-wrap');
+
+    function setSectionEnabled(section, enabled) {
+        section.querySelectorAll('input, select, textarea').forEach((field) => {
+            field.disabled = !enabled;
+        });
+    }
+
+    function updateRoleFields() {
+        const isStudent = roleSelect.value === 'student';
+        studentFields.classList.toggle('hidden', !isStudent);
+        parentFields.classList.toggle('hidden', isStudent);
+        setSectionEnabled(studentFields, isStudent);
+        setSectionEnabled(parentFields, !isStudent);
+        updateThirdLanguage(false);
+    }
+
+    function classNumber() {
+        const match = (gradeSelect.value || '').match(/\d+/);
+        return match ? Number(match[0]) : 0;
+    }
+
+    function updateSecondLanguage(preserveSelection = true) {
+        const previous = preserveSelection ? r2Select.value : '';
+        const choices = ['Telugu', 'Hindi'].filter((value) => value !== r1Select.value);
+
+        r2Select.innerHTML = '';
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = r1Select.value ? 'Select R2' : 'Select R1 first';
+        r2Select.appendChild(placeholder);
+
+        choices.forEach((language) => {
+            const option = document.createElement('option');
+            option.value = language;
+            option.textContent = language;
+            r2Select.appendChild(option);
+        });
+
+        r2Select.value = choices.includes(previous) ? previous : '';
+        updateThirdLanguage(false);
+    }
+
+    function updateThirdLanguage(preserveSelection = true) {
+        const previous = preserveSelection ? r3Select.value : '';
+        const grade = classNumber();
+        const shouldShow = roleSelect.value === 'student' &&
+            grade >= 6 && grade <= 8 &&
+            Boolean(r1Select.value) && Boolean(r2Select.value);
+
+        r3Wrap.classList.toggle('hidden', !shouldShow);
+        r3Select.disabled = !shouldShow;
+        r3Select.required = shouldShow;
+        r3Select.innerHTML = '';
+
+        if (!shouldShow) {
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = 'R3 is only used for Classes 6–8';
+            r3Select.appendChild(placeholder);
+            return;
+        }
+
+        let choices = r2Select.value === 'Telugu'
+            ? ['Hindi', 'Sanskrit']
+            : ['Telugu', 'Sanskrit'];
+        choices = choices.filter((value) =>
+            value !== r1Select.value && value !== r2Select.value
+        );
+
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = 'Select R3';
+        r3Select.appendChild(placeholder);
+
+        choices.forEach((language) => {
+            const option = document.createElement('option');
+            option.value = language;
+            option.textContent = language;
+            r3Select.appendChild(option);
+        });
+
+        const preferred = r2Select.value === 'Telugu' ? 'Hindi' : 'Telugu';
+        r3Select.value = choices.includes(previous)
+            ? previous
+            : (choices.includes(preferred) ? preferred : (choices[0] || ''));
+    }
+
+    roleSelect.addEventListener('change', updateRoleFields);
+    r1Select.addEventListener('change', () => updateSecondLanguage(false));
+    r2Select.addEventListener('change', () => updateThirdLanguage(false));
+    gradeSelect.addEventListener('change', () => updateThirdLanguage(false));
+
+    updateSecondLanguage(false);
+    updateRoleFields();
+})();
+</script>
 {% endblock %}
