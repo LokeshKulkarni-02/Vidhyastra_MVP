@@ -61,9 +61,10 @@
         <h2>Subject progress & XP</h2>
     </div>
 
-    <a class="text-link" href="{{ url_for('report', student_id=user['id']) }}">
-        View full report ↗
-    </a>
+    <div class="hero-actions">
+        <a class="button small secondary" href="{{ url_for('curriculum') }}">Browse curriculum →</a>
+        <a class="text-link" href="{{ url_for('report', student_id=user['id']) }}">View full report ↗</a>
+    </div>
 </section>
 
 <div class="content-grid">

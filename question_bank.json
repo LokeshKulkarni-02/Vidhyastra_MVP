@@ -1,0 +1,52 @@
+{
+  "bank_version": "pilot-1.0",
+  "curriculum_version": "NCERT-NCFSE-2026-27-PILOT",
+  "note": "Original practice questions written for the Vidhyastra prototype. They are not copied from the NCERT textbook.",
+  "questions": [
+    {
+      "id": "C8M1-SQ-001", "grade": "Class 8", "subject": "Mathematics", "chapter_id": "c8-math-ch01", "topic": "Square Numbers", "concept_id": "square-as-product", "concept": "A square number as n × n", "prerequisites": ["multiplication-facts"], "difficulty": "easy", "q": "What is the square of 7?", "options": ["14", "42", "49", "77"], "answer": "49", "why": "The square of a number is the number multiplied by itself: 7 × 7 = 49."
+    },
+    {
+      "id": "C8M1-SQ-002", "grade": "Class 8", "subject": "Mathematics", "chapter_id": "c8-math-ch01", "topic": "Square Numbers", "concept_id": "recognising-square-numbers", "concept": "Recognising perfect squares", "prerequisites": ["square-as-product"], "difficulty": "easy", "q": "Which of these numbers is a perfect square?", "options": ["45", "64", "70", "90"], "answer": "64", "why": "64 is a perfect square because 8 × 8 = 64."
+    },
+    {
+      "id": "C8M1-SQ-003", "grade": "Class 8", "subject": "Mathematics", "chapter_id": "c8-math-ch01", "topic": "Square Numbers", "concept_id": "square-as-product", "concept": "A square number as n × n", "prerequisites": ["multiplication-facts"], "difficulty": "easy", "q": "What is 12 squared?", "options": ["24", "124", "144", "212"], "answer": "144", "why": "12 squared means 12 × 12, which equals 144."
+    },
+    {
+      "id": "C8M1-SQ-004", "grade": "Class 8", "subject": "Mathematics", "chapter_id": "c8-math-ch01", "topic": "Square Numbers", "concept_id": "square-roots", "concept": "Finding square roots", "prerequisites": ["recognising-square-numbers"], "difficulty": "easy", "q": "What is the square root of 81?", "options": ["7", "8", "9", "10"], "answer": "9", "why": "The square root of 81 is 9 because 9 × 9 = 81."
+    },
+    {
+      "id": "C8M1-SQ-005", "grade": "Class 8", "subject": "Mathematics", "chapter_id": "c8-math-ch01", "topic": "Square Numbers", "concept_id": "square-number-patterns", "concept": "Patterns in square numbers", "prerequisites": ["recognising-square-numbers"], "difficulty": "medium", "q": "What is the next square number after 36?", "options": ["42", "45", "49", "54"], "answer": "49", "why": "36 is 6². The next square is 7² = 49."
+    },
+    {
+      "id": "C8M1-SQ-006", "grade": "Class 8", "subject": "Mathematics", "chapter_id": "c8-math-ch01", "topic": "Square Numbers", "concept_id": "square-number-patterns", "concept": "Patterns in square numbers", "prerequisites": ["recognising-square-numbers"], "difficulty": "medium", "q": "Which number cannot be the units digit of a perfect square?", "options": ["1", "4", "6", "8"], "answer": "8", "why": "A perfect square in base ten cannot end in 2, 3, 7 or 8."
+    },
+    {
+      "id": "C8M1-SQ-007", "grade": "Class 8", "subject": "Mathematics", "chapter_id": "c8-math-ch01", "topic": "Square Numbers", "concept_id": "square-number-patterns", "concept": "Patterns in square numbers", "prerequisites": ["recognising-square-numbers"], "difficulty": "medium", "q": "What is the sum of the first four odd positive numbers: 1 + 3 + 5 + 7?", "options": ["12", "14", "16", "18"], "answer": "16", "why": "1 + 3 + 5 + 7 = 16, and 16 is 4². The sum of the first four odd positive numbers is 4²."
+    },
+    {
+      "id": "C8M1-SQ-008", "grade": "Class 8", "subject": "Mathematics", "chapter_id": "c8-math-ch01", "topic": "Square Numbers", "concept_id": "square-roots", "concept": "Finding square roots", "prerequisites": ["recognising-square-numbers"], "difficulty": "medium", "q": "A square has an area of 169 cm². What is the length of one side?", "options": ["11 cm", "12 cm", "13 cm", "14 cm"], "answer": "13 cm", "why": "For a square, area = side × side. The side is √169 = 13 cm."
+    },
+    {
+      "id": "C8M1-SQ-009", "grade": "Class 8", "subject": "Mathematics", "chapter_id": "c8-math-ch01", "topic": "Square Numbers", "concept_id": "recognising-square-numbers", "concept": "Recognising perfect squares", "prerequisites": ["square-as-product"], "difficulty": "hard", "q": "Which of these lies between 10² and 11²?", "options": ["95", "100", "105", "121"], "answer": "105", "why": "10² = 100 and 11² = 121. The number 105 lies between them."
+    },
+    {
+      "id": "C8M1-CU-001", "grade": "Class 8", "subject": "Mathematics", "chapter_id": "c8-math-ch01", "topic": "Cubic Numbers", "concept_id": "cube-as-product", "concept": "A cube number as n × n × n", "prerequisites": ["multiplication-facts"], "difficulty": "easy", "q": "What is the cube of 3?", "options": ["9", "18", "27", "36"], "answer": "27", "why": "The cube of 3 is 3 × 3 × 3 = 27."
+    },
+    {
+      "id": "C8M1-CU-002", "grade": "Class 8", "subject": "Mathematics", "chapter_id": "c8-math-ch01", "topic": "Cubic Numbers", "concept_id": "recognising-cubes", "concept": "Recognising perfect cubes", "prerequisites": ["cube-as-product"], "difficulty": "easy", "q": "Which number is a perfect cube?", "options": ["16", "25", "64", "81"], "answer": "64", "why": "64 is a perfect cube because 4 × 4 × 4 = 64."
+    },
+    {
+      "id": "C8M1-CU-003", "grade": "Class 8", "subject": "Mathematics", "chapter_id": "c8-math-ch01", "topic": "Cubic Numbers", "concept_id": "cube-roots", "concept": "Finding cube roots", "prerequisites": ["recognising-cubes"], "difficulty": "easy", "q": "What is the cube root of 125?", "options": ["3", "4", "5", "6"], "answer": "5", "why": "The cube root of 125 is 5 because 5 × 5 × 5 = 125."
+    },
+    {
+      "id": "C8M1-CU-004", "grade": "Class 8", "subject": "Mathematics", "chapter_id": "c8-math-ch01", "topic": "Cubic Numbers", "concept_id": "cube-as-product", "concept": "A cube number as n × n × n", "prerequisites": ["multiplication-facts"], "difficulty": "medium", "q": "What is 6 cubed?", "options": ["36", "108", "216", "256"], "answer": "216", "why": "6 cubed means 6 × 6 × 6 = 216."
+    },
+    {
+      "id": "C8M1-CU-005", "grade": "Class 8", "subject": "Mathematics", "chapter_id": "c8-math-ch01", "topic": "Cubic Numbers", "concept_id": "recognising-cubes", "concept": "Recognising perfect cubes", "prerequisites": ["cube-as-product"], "difficulty": "medium", "q": "Which expression equals 35?", "options": ["2³ + 3³", "2² + 3³", "2³ + 3²", "3³ + 3²"], "answer": "2³ + 3³", "why": "2³ + 3³ = 8 + 27 = 35."
+    },
+    {
+      "id": "C8M1-CU-006", "grade": "Class 8", "subject": "Mathematics", "chapter_id": "c8-math-ch01", "topic": "Cubic Numbers", "concept_id": "cube-roots", "concept": "Finding cube roots", "prerequisites": ["recognising-cubes"], "difficulty": "medium", "q": "A cube has a volume of 216 cm³. What is the length of one edge?", "options": ["4 cm", "5 cm", "6 cm", "8 cm"], "answer": "6 cm", "why": "For a cube, volume = edge × edge × edge. The edge is ∛216 = 6 cm."
+    }
+  ]
+}

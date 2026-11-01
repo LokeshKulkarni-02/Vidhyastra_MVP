@@ -37,6 +37,9 @@
 
     <div class="panel result-panel">
         <h3>{{ question.q }}</h3>
+        {% if question.concept %}
+        <p class="tiny-note">Concept checked: {{ question.concept }} · Difficulty: {{ question.difficulty|capitalize }}</p>
+        {% endif %}
         <p>Your answer: <b>{{ selected }}</b></p>
         <p>Correct answer: <b>{{ question.answer }}</b></p>
 
@@ -55,7 +58,7 @@
     </p>
 
     <div class="hero-actions centered">
-        <a class="button primary" href="{{ url_for('quiz', subject=subject, topic=topic) }}">
+        <a class="button primary" href="{{ url_for('quiz', subject=subject, topic=topic, chapter_id=chapter_id) }}">
             Try another question →
         </a>
         <a class="button secondary" href="{{ url_for('assistant') }}">

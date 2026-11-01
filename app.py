@@ -12,6 +12,9 @@ from flask import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 
+from curriculum_catalog import get_grade_curriculum, get_chapter
+from question_bank import get_topic_questions
+
 # ==================================================
 # APPLICATION CONFIGURATION
 # ==================================================
@@ -348,6 +351,12 @@ def migrate_database(con):
             con, 'tickets', 'subject',
             "TEXT NOT NULL DEFAULT ''"
         )
+
+        # Keep question metadata with each attempt so concept-level analysis
+        # can be added without losing the existing quiz history.
+        add_column_if_missing(con, 'quiz_attempts', 'question_id', "TEXT NOT NULL DEFAULT ''")
+        add_column_if_missing(con, 'quiz_attempts', 'concept_id', "TEXT NOT NULL DEFAULT ''")
+        add_column_if_missing(con, 'quiz_attempts', 'difficulty', "TEXT NOT NULL DEFAULT ''")
 
         con.execute('''
             CREATE TABLE IF NOT EXISTS student_xp (
@@ -1947,6 +1956,22 @@ def report(student_id):
         con.close()
 
 
+@app.route('/curriculum')
+@role_required('student')
+def curriculum():
+    """Show the catalogue entries available for the signed-in student's class."""
+    user = current_user()
+    if not user:
+        abort(403)
+
+    curriculum_data = get_grade_curriculum(user['grade'])
+    return render_template(
+        'curriculum.html',
+        user=user,
+        curriculum=curriculum_data
+    )
+
+
 # ==================================================
 # QUIZ AND LEARNING ASSISTANT
 # ==================================================
@@ -1956,28 +1981,48 @@ def report(student_id):
 def quiz():
 
     user = current_user()
-
     if not user:
         abort(403)
 
-    subject = request.values.get('subject', 'Mathematics')
-    topic = request.values.get('topic', 'Fractions')
+    subject = request.values.get('subject', 'Mathematics').strip()
+    topic = request.values.get('topic', 'Fractions').strip()
+    chapter_id = request.values.get('chapter_id', '').strip()
 
-    if subject not in TOPIC_BANK:
-        subject = 'Mathematics'
+    chapter = None
+    chapter_title = None
 
-    if topic not in TOPIC_BANK[subject]:
-        topic = next(iter(TOPIC_BANK[subject]))
+    if chapter_id:
+        # A chapter ID is accepted only when it belongs to the student's class.
+        chapter = get_chapter(user['grade'], subject, chapter_id)
+        if not chapter:
+            abort(404)
 
-    questions = TOPIC_BANK[subject][topic]
+        chapter_title = chapter['title']
+        topic_titles = [item['title'] for item in chapter.get('topics', [])]
+        if topic not in topic_titles:
+            topic = topic_titles[0] if topic_titles else ''
+
+        questions = get_topic_questions(
+            user['grade'], subject, chapter_id, topic
+        )
+        if not questions:
+            abort(404)
+        topics = topic_titles
+
+    else:
+        # Preserve the original prototype question bank for existing links.
+        if subject not in TOPIC_BANK:
+            subject = 'Mathematics'
+        if topic not in TOPIC_BANK[subject]:
+            topic = next(iter(TOPIC_BANK[subject]))
+        questions = TOPIC_BANK[subject][topic]
+        topics = list(TOPIC_BANK[subject].keys())
 
     if request.method == 'POST':
-
         try:
             qindex = int(request.form.get('qindex', '0'))
         except (TypeError, ValueError):
             qindex = 0
-
         qindex %= len(questions)
 
         question = questions[qindex]
@@ -1986,102 +2031,67 @@ def quiz():
         now = datetime.now().isoformat(timespec='seconds')
 
         con = db()
-
         try:
-
             con.execute('''
                 INSERT INTO quiz_attempts
-                (student_id, subject, topic, question, selected, answer, is_correct, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (student_id, subject, topic, question, selected, answer,
+                 is_correct, created_at, question_id, concept_id, difficulty)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
-                user['id'],
-                subject,
-                topic,
-                question['q'],
-                selected,
-                question['answer'],
-                correct,
-                now
+                user['id'], subject, topic, question['q'], selected,
+                question['answer'], correct, now,
+                question.get('id', ''),
+                question.get('concept_id', ''),
+                question.get('difficulty', '')
             ))
 
-            # Update topic-level learning progress on every attempt.
-
+            # Existing topic progress remains compatible with earlier reports.
             row = con.execute('''
                 SELECT * FROM progress
                 WHERE student_id=? AND subject=? AND topic=?
             ''', (user['id'], subject, topic)).fetchone()
 
             if row:
-
                 attempts_count = row['attempts'] + 1
                 correct_count = row['correct'] + correct
-
                 level = min(5, max(1, row['level'] + (
                     1 if correct and attempts_count >= 3
                     and correct_count / attempts_count >= 0.8 else 0
                 )))
-
                 con.execute('''
                     UPDATE progress
                     SET attempts=?, correct=?, level=?, last_seen=?
                     WHERE id=?
-                ''', (
-                    attempts_count,
-                    correct_count,
-                    level,
-                    now,
-                    row['id']
-                ))
-
+                ''', (attempts_count, correct_count, level, now, row['id']))
             else:
-
                 con.execute('''
                     INSERT INTO progress
                     (student_id, subject, topic, attempts, correct, level, last_seen)
                     VALUES (?, ?, ?, 1, ?, 1, ?)
-                ''', (
-                    user['id'],
-                    subject,
-                    topic,
-                    correct,
-                    now
-                ))
-
-            # Award XP only for a correct answer.
+                ''', (user['id'], subject, topic, correct, now))
 
             xp_earned = 0
-
             if correct:
-
                 xp_earned, new_subject_xp, new_total_xp = award_quiz_xp(
                     user['id'], subject, con
                 )
-
             else:
-
                 subject_xp_map, new_total_xp = get_student_xp_summary(
                     user['id'], con
                 )
-
                 new_subject_xp = subject_xp_map[subject]
 
             leaderboard, my_entry, student_ahead, student_behind = get_class_leaderboard(
-                user['grade'],
-                user['school_id'],
-                user['board'],
+                user['grade'], user['school_id'], user['board'],
                 subject_filter=subject,
-                current_student_id=user['id'],
-                con=con
+                current_student_id=user['id'], con=con
             )
-
             my_rank = my_entry['rank'] if my_entry else 1
-
             con.commit()
 
         except Exception:
             con.rollback()
             raise
-
         finally:
             con.close()
 
@@ -2093,6 +2103,8 @@ def quiz():
             correct=bool(correct),
             subject=subject,
             topic=topic,
+            chapter_id=chapter_id,
+            chapter_title=chapter_title,
             xp_earned=xp_earned,
             new_subject_xp=new_subject_xp,
             new_total_xp=new_total_xp,
@@ -2101,13 +2113,31 @@ def quiz():
             student_behind=student_behind
         )
 
+    # Rotate through the topic's questions in order instead of repeating Q1.
+    con = db()
+    try:
+        attempted = con.execute('''
+            SELECT COUNT(*) AS n
+            FROM quiz_attempts
+            WHERE student_id=? AND subject=? AND topic=?
+        ''', (user['id'], subject, topic)).fetchone()['n']
+    finally:
+        con.close()
+
+    qindex = attempted % len(questions)
+    question = questions[qindex]
+
     return render_template(
         'quiz.html',
         user=user,
         subject=subject,
         topic=topic,
-        topics=list(TOPIC_BANK[subject].keys()),
-        questions=questions
+        topics=topics,
+        questions=questions,
+        question=question,
+        qindex=qindex,
+        chapter_id=chapter_id,
+        chapter_title=chapter_title
     )
 
 
