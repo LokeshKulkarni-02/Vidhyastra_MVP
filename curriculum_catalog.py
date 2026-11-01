@@ -513,6 +513,12 @@ if not any(_topic.get("title") == "Chapter Assessment" for _topic in _class8_top
     })
 _class8_chapter["topics"] = _class8_topics
 
+# Vidhyastra NCERT Maths & Science expansion v1
+# Adds the Grade 6-10 NCERT Maths/Science chapter catalogue. Existing topic IDs
+# and working question mappings are preserved by install_ncert_catalogue().
+from ncert_quiz_catalog import install_ncert_catalogue
+install_ncert_catalogue(CURRICULUM)
+
 # PUBLIC HELPER FUNCTIONS
 # --------------------------------------------------
 
