@@ -71,38 +71,38 @@
             <div class="subject-info">
                 <div class="subject-title-row">
                     <h3>Mathematics</h3>
-                    <span class="subject-xp-badge">⚡ {{ subject_xp.get('Mathematics', 100) }} XP</span>
+                    <span class="subject-xp-badge">{{ subject_xp.get('Mathematics', 0) }} XP</span>
                 </div>
                 <p>Fractions · Percentages · Linear equations</p>
                 <div class="bar"><span style="width:{{ [((rows|selectattr('subject','equalto','Mathematics')|list|length)*20),100]|min }}%"></span></div>
             </div>
-            <a class="button small primary" href="{{ url_for('quiz', subject='Mathematics', topic='Fractions') }}">Practice (+20 XP)</a>
+            <a class="button small primary" href="{{ url_for('quiz', subject='Mathematics', topic='Fractions') }}">Practice (+5 XP)</a>
         </div>
         <div class="subject-row">
             <div class="subject-badge science">✧</div>
             <div class="subject-info">
                 <div class="subject-title-row">
                     <h3>Science</h3>
-                    <span class="subject-xp-badge">⚡ {{ subject_xp.get('Science', 100) }} XP</span>
+                    <span class="subject-xp-badge">{{ subject_xp.get('Science', 0) }} XP</span>
                 </div>
                 <p>Cells · Force and motion</p>
                 <div class="bar"><span style="width:{{ [((rows|selectattr('subject','equalto','Science')|list|length)*25),100]|min }}%"></span></div>
             </div>
-            <a class="button small secondary" href="{{ url_for('quiz', subject='Science', topic='Cells') }}">Practice (+20 XP)</a>
+            <a class="button small secondary" href="{{ url_for('quiz', subject='Science', topic='Cells') }}">Practice (+5 XP)</a>
         </div>
         <div class="subject-row">
             <div class="subject-badge english">Aa</div>
             <div class="subject-info">
                 <div class="subject-title-row">
                     <h3>English</h3>
-                    <span class="subject-xp-badge">⚡ {{ subject_xp.get('English', 100) }} XP</span>
+                    <span class="subject-xp-badge">{{ subject_xp.get('English', 0) }} XP</span>
                 </div>
                 <p>Grammar and communication</p>
                 <div class="bar"><span style="width:{{ [((rows|selectattr('subject','equalto','English')|list|length)*30),100]|min }}%"></span></div>
             </div>
-            <a class="button small secondary" href="{{ url_for('quiz', subject='English', topic='Grammar') }}">Practice (+20 XP)</a>
+            <a class="button small secondary" href="{{ url_for('quiz', subject='English', topic='Grammar') }}">Practice (+5 XP)</a>
         </div>
-        <p class="tiny-note">Every student starts with 100 base XP per subject (600 base overall). Correct answers earn +20 XP. Progress bars show prototype topic activity, not official syllabus completion.</p>
+        <p class="tiny-note">Every student starts with 0 XP. Each correct answer earns +5 XP for that subject and overall. Progress bars show prototype topic activity, not official syllabus completion.</p>
     </div>
     <aside class="panel buddy-panel">
         <div class="buddy-avatar">✦</div>
@@ -156,11 +156,39 @@
                     <small class="lb-participant-detail">{{ user['roll_no'] or 'Student account' }}</small>
                 </td>
                 <td class="lb-score">
-                    {{ total_xp if lb_subject == 'overall' else subject_xp.get(lb_subject, 100) }} XP
+                    {{ total_xp if lb_subject == 'overall' else subject_xp.get(lb_subject, 0) }} XP
                 </td>
             </tr>
         </tbody>
     </table>
+</div>
+<div class="lb-targets" aria-label="XP needed for leaderboard goals">
+    <div class="lb-target">
+        <span>Next position</span>
+        {% if xp_to_next_rank is not none %}
+        <strong>{{ xp_to_next_rank }} XP</strong>
+        <small>{{ correct_answers_to_next_rank }} correct answer{% if correct_answers_to_next_rank != 1 %}s{% endif %} needed</small>
+        {% elif is_first_place %}
+        <strong>First place</strong>
+        <small>You are already at the top</small>
+        {% else %}
+        <strong>Not ranked</strong>
+        <small>No position available in this group</small>
+        {% endif %}
+    </div>
+    <div class="lb-target">
+        <span>First place</span>
+        {% if xp_to_first_place is not none and not is_first_place %}
+        <strong>{{ xp_to_first_place }} XP</strong>
+        <small>{{ correct_answers_to_first_place }} correct answer{% if correct_answers_to_first_place != 1 %}s{% endif %} needed</small>
+        {% elif is_first_place %}
+        <strong>Reached</strong>
+        <small>You are currently in first place</small>
+        {% else %}
+        <strong>Not ranked</strong>
+        <small>No position available in this group</small>
+        {% endif %}
+    </div>
 </div>
 {#
             <span class="rival-tag tag-lead">👑 CLASS LEADER</span>

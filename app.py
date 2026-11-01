@@ -38,8 +38,8 @@ SUBJECTS = [
     'Social Studies', 'Hindi', 'Telugu'
 ]
 
-BASE_XP_PER_SUBJECT = 100
-CORRECT_ANSWER_XP = 20
+BASE_XP_PER_SUBJECT = 0
+CORRECT_ANSWER_XP = 5
 TICKET_STATUSES = ['Open', 'In review', 'Scheduled', 'Closed']
 
 # ==================================================
@@ -300,7 +300,7 @@ def create_base_tables(con):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             student_id INTEGER NOT NULL,
             subject TEXT NOT NULL,
-            xp INTEGER NOT NULL DEFAULT 100,
+            xp INTEGER NOT NULL DEFAULT 0,
             UNIQUE(student_id, subject),
             FOREIGN KEY(student_id) REFERENCES users(id)
         );
@@ -363,7 +363,7 @@ def migrate_database(con):
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 student_id INTEGER NOT NULL,
                 subject TEXT NOT NULL,
-                xp INTEGER NOT NULL DEFAULT 100,
+                xp INTEGER NOT NULL DEFAULT 0,
                 UNIQUE(student_id, subject),
                 FOREIGN KEY(student_id) REFERENCES users(id)
             )
@@ -1275,6 +1275,29 @@ def dashboard():
             )
 
             my_rank = my_entry['rank'] if my_entry else 1
+            xp_to_next_rank = None
+            correct_answers_to_next_rank = None
+
+            if student_ahead and my_entry:
+                xp_to_next_rank = student_ahead['xp'] - my_entry['xp'] + 1
+                correct_answers_to_next_rank = (
+                    xp_to_next_rank + CORRECT_ANSWER_XP - 1
+                ) // CORRECT_ANSWER_XP
+
+            is_first_place = bool(
+                leaderboard and leaderboard[0]['id'] == user['id']
+            )
+            xp_to_first_place = None
+            correct_answers_to_first_place = None
+
+            if is_first_place:
+                xp_to_first_place = 0
+                correct_answers_to_first_place = 0
+            elif leaderboard and my_entry:
+                xp_to_first_place = leaderboard[0]['xp'] - my_entry['xp'] + 1
+                correct_answers_to_first_place = (
+                    xp_to_first_place + CORRECT_ANSWER_XP - 1
+                ) // CORRECT_ANSWER_XP
 
             return render_template(
                 'student_dashboard.html',
@@ -1288,6 +1311,11 @@ def dashboard():
                 total_xp=total_xp,
                 leaderboard=leaderboard,
                 my_rank=my_rank,
+                xp_to_next_rank=xp_to_next_rank,
+                correct_answers_to_next_rank=correct_answers_to_next_rank,
+                xp_to_first_place=xp_to_first_place,
+                correct_answers_to_first_place=correct_answers_to_first_place,
+                is_first_place=is_first_place,
                 student_ahead=student_ahead,
                 student_behind=student_behind,
                 lb_subject=lb_subject
