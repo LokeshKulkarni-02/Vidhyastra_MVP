@@ -44,8 +44,25 @@
 {% if curriculum.subject_catalogue_note %}
 <div class="notice">{{ curriculum.subject_catalogue_note }}</div>
 {% endif %}
+<!-- SUBJECT FILTER -->
+<section class="panel" style="margin-bottom: 24px;">
+    <label for="subject-filter">
+        <strong>Choose a Subject</strong>
+    </label>
+
+    <select id="subject-filter"
+            style="max-width: 350px; margin-top: 10px;">
+
+        <option value="All">All Subjects</option>
+        <option value="Mathematics">Mathematics</option>
+        <option value="Science">Science</option>
+
+    </select>
+</section>
 
 {% for subject_name, subject in curriculum.subjects.items() %}
+<div class="curriculum-subject-group"
+     data-subject="{{ subject_name }}">
 <section class="section-head">
     <div>
         <span class="eyebrow">SUBJECT</span>
@@ -140,5 +157,34 @@
     </article>
 {% endif %}
 {% endfor %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
 
+    const subjectFilter = document.getElementById('subject-filter');
+
+    const subjectGroups = document.querySelectorAll(
+        '.curriculum-subject-group'
+    );
+
+    subjectFilter.addEventListener('change', function () {
+
+        const selectedSubject = subjectFilter.value;
+
+        subjectGroups.forEach(function (group) {
+
+            if (
+                selectedSubject === 'All' ||
+                group.dataset.subject === selectedSubject
+            ) {
+                group.hidden = false;
+            } else {
+                group.hidden = true;
+            }
+
+        });
+
+    });
+
+});
+</script>
 {% endblock %}

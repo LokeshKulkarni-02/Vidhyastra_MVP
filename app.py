@@ -2167,6 +2167,11 @@ def curriculum():
         abort(403)
 
     curriculum_data = get_mvp_grade_curriculum(user['grade'], user=user)
+    selected_subject = request.args.get('subject', '').strip()
+
+    if selected_subject not in curriculum_data.get('subjects', {}):
+        selected_subject = ''
+
     class_no = grade_number(user['grade'])
     r3_bridge_note = ''
     if class_no in (6, 7, 8) and user['third_language']:
@@ -2181,6 +2186,7 @@ def curriculum():
         'curriculum.html',
         user=user,
         curriculum=curriculum_data,
+        selected_subject=selected_subject,
         first_language=user['first_language'],
         second_language=user['second_language'],
         third_language=user['third_language'],
