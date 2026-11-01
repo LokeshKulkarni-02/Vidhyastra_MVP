@@ -89,3 +89,28 @@
 @media(max-width:950px){.stats-grid-4{grid-template-columns:repeat(2,1fr)!important}.rival-radar-grid{grid-template-columns:1fr}.xp-reward-card{flex-direction:column;align-items:flex-start}.xp-reward-right{text-align:left}}
 @media(max-width:520px){.stats-grid-4{grid-template-columns:1fr!important}}
 
+/* Personal leaderboard */
+.lb-toolbar{display:grid;grid-template-columns:minmax(190px,.75fr) 1.25fr;align-items:center;gap:18px;margin:40px 0 16px}
+.lb-title-band{min-height:72px;padding:12px 20px;display:grid;place-items:center;background:#17617e;color:#fff;border-radius:4px}
+.lb-title-band h2{margin:0;color:inherit;font-size:1.65rem}
+.lb-subject-picker{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.lb-tab{padding:7px 12px;border:1px solid #d7dfe2;border-radius:4px;background:#fff;color:#42525a;font-size:.8rem;font-weight:600;text-decoration:none}
+.lb-tab:hover,.lb-tab.active{border-color:#17617e;background:#17617e;color:#fff;box-shadow:none}
+.leaderboard-panel{padding:0;overflow:hidden;border-radius:4px;box-shadow:none}
+.lb-personal-table{width:100%;border-collapse:collapse;table-layout:fixed}
+.lb-personal-table th,.lb-personal-table td{padding:16px 20px;border:1px solid #d8dddf;text-align:left}
+.lb-personal-table th{background:#f2f5f6;color:#293b43;font-size:.85rem;font-weight:700}
+.lb-personal-table th:first-child{width:20%}
+.lb-personal-table th:last-child{width:22%;text-align:right}
+.lb-personal-table td:last-child{text-align:right}
+.lb-position{font-size:1.1rem;font-weight:700;color:#17617e}
+.lb-participant-name,.lb-participant-detail{display:block}
+.lb-participant-detail{margin-top:3px;color:#68718a;font-size:.78rem}
+.lb-score{font-weight:700;color:#293b43}
+.theme-dark .lb-tab{border-color:#42495d;background:#202438;color:#e5e7eb}
+.theme-dark .lb-tab:hover,.theme-dark .lb-tab.active{border-color:#3184a0;background:#17617e;color:#fff}
+.theme-dark .lb-personal-table th{background:#252a3d;color:#eef0ff}
+.theme-dark .lb-personal-table td{border-color:#42495d}
+.theme-dark .lb-position,.theme-dark .lb-score{color:#d8eaf0}
+@media(max-width:700px){.lb-toolbar{grid-template-columns:1fr}.lb-subject-picker{justify-content:flex-start}.lb-personal-table th,.lb-personal-table td{padding:12px 10px}.lb-personal-table th:first-child{width:24%}.lb-personal-table th:last-child{width:25%}}
+
