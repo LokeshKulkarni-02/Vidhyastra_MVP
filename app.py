@@ -407,6 +407,7 @@ def migrate_database(con):
         add_column_if_missing(con, 'quiz_attempts', 'question_id', "TEXT NOT NULL DEFAULT ''")
         add_column_if_missing(con, 'quiz_attempts', 'concept_id', "TEXT NOT NULL DEFAULT ''")
         add_column_if_missing(con, 'quiz_attempts', 'difficulty', "TEXT NOT NULL DEFAULT ''")
+        add_column_if_missing(con, 'quiz_attempts', 'chapter_id', "TEXT NOT NULL DEFAULT ''")
 
         con.execute('''
             CREATE TABLE IF NOT EXISTS student_xp (
@@ -751,6 +752,21 @@ def award_quiz_xp(student_id, subject, con):
     return CORRECT_ANSWER_XP, xp_by_subject[subject], total_xp
 
 
+def student_performance_category(accuracy_percent, total_attempts):
+    """Return a supportive category based on all recorded quiz attempts."""
+    if total_attempts <= 0:
+        return "Not assessed yet"
+    if accuracy_percent < 40:
+        return "Foundation Builder"
+    if accuracy_percent < 60:
+        return "Developing Learner"
+    if accuracy_percent < 80:
+        return "Proficient Learner"
+    if accuracy_percent < 90:
+        return "Advanced Learner"
+    return "Mastery Learner"
+
+
 def get_class_leaderboard(
     grade,
     school_id,
@@ -1050,37 +1066,24 @@ def register():
         grade_value = form.get('grade', '').strip()
         class_no = grade_number(grade_value)
 
-        if class_no not in range(5, 11):
-            flash('Choose a class from Class 5 to Class 10.', 'error')
+        if class_no not in range(6, 11):
+            flash('Choose a class from Class 6 to Class 10.', 'error')
             return redirect(url_for('register'))
 
-        # Class 5 has R1 and R2 only. Classes 6–8 also require a valid R3.
-        if class_no == 5:
-            third_language = ''
-        elif 6 <= class_no <= 8 and not third_language:
+        # R3 is enabled only for Classes 6-8 when R2 is Hindi.
+        if 6 <= class_no <= 8 and second_language == 'Hindi' and not third_language:
             third_language = default_r3_for_student(
                 grade_value, first_language, second_language
             )
-        elif class_no >= 9:
-            third_language = ''
-
-        if 5 <= class_no <= 8:
-            valid_languages, language_error = validate_language_selection(
-                grade_value, first_language, second_language, third_language
-            )
-            if not valid_languages:
-                flash(language_error, 'error')
-                return redirect(url_for('register'))
         else:
-            if first_language not in ('English', 'Telugu', 'Hindi'):
-                flash('Choose a valid first language.', 'error')
-                return redirect(url_for('register'))
-            if second_language not in ('Telugu', 'Hindi') or second_language == first_language:
-                flash(
-                    'Choose Telugu or Hindi as R2, different from R1.',
-                    'error'
-                )
-                return redirect(url_for('register'))
+            third_language = '' if not (6 <= class_no <= 8 and second_language == 'Hindi') else third_language
+
+        valid_languages, language_error = validate_language_selection(
+            grade_value, first_language, second_language, third_language
+        )
+        if not valid_languages:
+            flash(language_error, 'error')
+            return redirect(url_for('register'))
 
     con = db()
 
@@ -1324,6 +1327,14 @@ def dashboard():
                 WHERE student_id=?
             ''', (user['id'],)).fetchone()
 
+            accuracy_percent = (
+                round(100 * attempts['correct'] / attempts['n'])
+                if attempts['n'] else 0
+            )
+            student_category = student_performance_category(
+                accuracy_percent, attempts['n']
+            )
+
             week_start = (
                 date.today() - timedelta(days=date.today().weekday())
             ).isoformat()
@@ -1401,6 +1412,8 @@ def dashboard():
                 rows=rows,
                 allocations=allocations,
                 attempts=attempts,
+                accuracy_percent=accuracy_percent,
+                student_category=student_category,
                 open_tickets=open_tickets,
                 ticket_history=ticket_history,
                 subject_xp=subject_xp,
@@ -1981,38 +1994,22 @@ def profile():
             ):
                 class_no = grade_number(user['grade'])
 
-                if class_no == 5:
-                    third_language = ''
-                elif 6 <= class_no <= 8 and not third_language:
+                if 6 <= class_no <= 8 and second_language == 'Hindi' and not third_language:
                     third_language = default_r3_for_student(
                         user['grade'], first_language, second_language
                     )
-                elif class_no >= 9:
-                    third_language = ''
-
-                if 5 <= class_no <= 8:
-                    valid_languages, language_error = validate_language_selection(
-                        user['grade'],
-                        first_language,
-                        second_language,
-                        third_language
-                    )
-                    if not valid_languages:
-                        flash(language_error, 'error')
-                        return redirect(url_for('profile'))
                 else:
-                    if first_language not in ('English', 'Telugu', 'Hindi'):
-                        flash('Choose a valid first language.', 'error')
-                        return redirect(url_for('profile'))
-                    if (
-                        second_language not in ('Telugu', 'Hindi')
-                        or second_language == first_language
-                    ):
-                        flash(
-                            'Choose Telugu or Hindi as R2, different from R1.',
-                            'error'
-                        )
-                        return redirect(url_for('profile'))
+                    third_language = '' if not (6 <= class_no <= 8 and second_language == 'Hindi') else third_language
+
+                valid_languages, language_error = validate_language_selection(
+                    user['grade'],
+                    first_language,
+                    second_language,
+                    third_language
+                )
+                if not valid_languages:
+                    flash(language_error, 'error')
+                    return redirect(url_for('profile'))
 
             con.execute('''
                 UPDATE users
@@ -2230,15 +2227,13 @@ def quiz():
 
     else:
 
-        # Keep compatibility with the original prototype quiz.
-        if subject not in TOPIC_BANK:
-            subject = 'Mathematics'
-
-        if topic not in TOPIC_BANK[subject]:
-            topic = next(iter(TOPIC_BANK[subject]))
-
-        questions = TOPIC_BANK[subject][topic]
-        topics = list(TOPIC_BANK[subject].keys())
+        # Do not serve the old shared, class-independent prototype bank.
+        # Students must enter practice from their own class curriculum.
+        flash(
+            'Please choose a topic from your class curriculum so the correct class question bank is loaded.',
+            'info'
+        )
+        return redirect(url_for('curriculum'))
 
     if not questions:
         abort(404)
@@ -2362,6 +2357,7 @@ def quiz():
                     student_id,
                     subject,
                     topic,
+                    chapter_id,
                     question,
                     selected,
                     answer,
@@ -2371,11 +2367,12 @@ def quiz():
                     concept_id,
                     difficulty
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 user['id'],
                 subject,
                 topic,
+                chapter_id,
                 question['q'],
                 selected,
                 question['answer'],
@@ -2483,6 +2480,36 @@ def quiz():
 
             my_rank = my_entry['rank'] if my_entry else 1
 
+            # Score the current 20-question topic cycle as one assessment.
+            topic_attempt_total = con.execute('''
+                SELECT COUNT(*) AS n
+                FROM quiz_attempts
+                WHERE student_id=? AND subject=? AND topic=? AND chapter_id=?
+            ''', (
+                user['id'], subject, topic, chapter_id
+            )).fetchone()['n']
+            session_offset = ((topic_attempt_total - 1) // len(questions)) * len(questions)
+            session_rows = con.execute('''
+                SELECT is_correct
+                FROM quiz_attempts
+                WHERE student_id=? AND subject=? AND topic=? AND chapter_id=?
+                ORDER BY id ASC
+                LIMIT ? OFFSET ?
+            ''', (
+                user['id'], subject, topic, chapter_id,
+                len(questions), session_offset
+            )).fetchall()
+            assessment_attempts = len(session_rows)
+            assessment_correct = sum(row['is_correct'] for row in session_rows)
+            assessment_percent = round(
+                100 * assessment_correct / assessment_attempts
+            ) if assessment_attempts else 0
+            assessment_complete = assessment_attempts == len(questions)
+            assessment_category = (
+                student_performance_category(assessment_percent, assessment_attempts)
+                if assessment_complete else ""
+            )
+
             con.commit()
 
         except Exception:
@@ -2509,7 +2536,13 @@ def quiz():
             new_total_xp=new_total_xp,
             my_rank=my_rank,
             student_ahead=student_ahead,
-            student_behind=student_behind
+            student_behind=student_behind,
+            assessment_attempts=assessment_attempts,
+            assessment_correct=assessment_correct,
+            assessment_percent=assessment_percent,
+            assessment_complete=assessment_complete,
+            assessment_category=assessment_category,
+            assessment_total=len(questions)
         )
 
     # --------------------------------------------------
@@ -2523,11 +2556,12 @@ def quiz():
         attempted = con.execute('''
             SELECT COUNT(*) AS n
             FROM quiz_attempts
-            WHERE student_id=? AND subject=? AND topic=?
+            WHERE student_id=? AND subject=? AND topic=? AND chapter_id=?
         ''', (
             user['id'],
             subject,
-            topic
+            topic,
+            chapter_id
         )).fetchone()['n']
 
     finally:

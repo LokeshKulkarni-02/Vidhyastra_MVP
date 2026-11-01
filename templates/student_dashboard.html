@@ -96,6 +96,31 @@
 </section>
 
 
+<!-- STUDENT PERFORMANCE CATEGORY -->
+<section class="panel" style="margin: 0 0 28px;">
+    <div class="subject-title-row">
+        <div>
+            <span class="eyebrow">YOUR LEARNING CATEGORY</span>
+            <h2>{{ student_category }}</h2>
+            {% if attempts['n'] %}
+            <p class="muted">
+                {{ accuracy_percent }}% correct across {{ attempts['n'] }} recorded questions.
+                This is a practice indicator and updates as you answer more questions.
+            </p>
+            {% else %}
+            <p class="muted">Complete practice questions to receive your first learning category.</p>
+            {% endif %}
+        </div>
+        {% if attempts['n'] %}
+        <strong class="subject-xp-badge">{{ accuracy_percent }}%</strong>
+        {% endif %}
+    </div>
+    <p class="tiny-note">
+        Categories: 0–39% Foundation Builder · 40–59% Developing Learner ·
+        60–79% Proficient Learner · 80–89% Advanced Learner · 90–100% Mastery Learner.
+    </p>
+</section>
+
 <!-- SUBJECT PROGRESS -->
 
 <section class="section-head">
@@ -152,11 +177,9 @@
 
             </div>
 
-            <a
-                class="button small primary"
-                href="{{ url_for('quiz', subject='Mathematics', topic='Fractions') }}"
-            >
-                Practice (+5 XP)
+            <a class="button small secondary"
+               href="{{ url_for('curriculum') }}">
+                Browse topics →
             </a>
 
         </div>
@@ -188,11 +211,9 @@
 
             </div>
 
-            <a
-                class="button small secondary"
-                href="{{ url_for('quiz', subject='Science', topic='Cells') }}"
-            >
-                Practice (+5 XP)
+            <a class="button small secondary"
+               href="{{ url_for('curriculum') }}">
+                Browse topics →
             </a>
 
         </div>
@@ -224,11 +245,9 @@
 
             </div>
 
-            <a
-                class="button small secondary"
-                href="{{ url_for('quiz', subject='English', topic='Grammar') }}"
-            >
-                Practice (+5 XP)
+            <a class="button small secondary"
+               href="{{ url_for('curriculum') }}">
+                Browse topics →
             </a>
 
         </div>

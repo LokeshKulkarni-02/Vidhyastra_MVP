@@ -49,6 +49,18 @@
         </div>
     </div>
 
+    <section class="panel" style="margin: 20px 0;">
+        <span class="eyebrow">TOPIC ASSESSMENT</span>
+        <h2>{{ assessment_attempts }} / {{ assessment_total }} questions completed</h2>
+        <p>{{ assessment_correct }} correct · {{ assessment_percent }}% accuracy so far</p>
+        {% if assessment_complete %}
+        <h3>Your category: {{ assessment_category }}</h3>
+        <p class="muted">You completed all 20 questions in this topic: 8 easy, 8 medium and 4 hard.</p>
+        {% else %}
+        <p class="muted">Continue with the next question. Your topic category is shown after all 20 questions are completed.</p>
+        {% endif %}
+    </section>
+
     <p class="result-note">
         {% if correct %}
         Your progress and XP have been updated! Keep trying more questions to climb higher on your class leaderboard.

@@ -1,30 +1,25 @@
-
 """Vidhyastra MVP language-selection rules.
 
-The bridge mappings below are Vidhyastra bridge levels, not official
-NCERT R3 class equivalences.
-"""
+MVP policy:
+- Students may register only in Classes 6-10.
+- R1: English, Telugu or Hindi.
+- R2: Telugu or Hindi, different from R1.
+- R3: Classes 6-8 only; Sanskrit is available only when R2 is Hindi.
+- Classes 9-10 do not have R3 in this MVP.
 
-LANGUAGES = ("English", "Telugu", "Hindi", "Sanskrit")
+The Sanskrit textbook/level mapping remains subject to verification.
+"""
 
 R1_OPTIONS = ("English", "Telugu", "Hindi")
 R2_OPTIONS = ("Telugu", "Hindi")
-
-# R3 bridge mapping requested for the MVP.
-R3_BRIDGE_LEVELS = {
-    (6, "Telugu"): 2,
-    (7, "Telugu"): 3,
-    (8, "Telugu"): 4,
-    (6, "Hindi"): 2,
-    (7, "Hindi"): 3,
-    (8, "Hindi"): 4,
-}
+R3_OPTIONS = ("Sanskrit",)
 
 
 def grade_number(grade):
-    """Convert 'Class 6' into 6."""
+    """Convert values such as 'Class 6' or '6' into an integer."""
     try:
-        return int(str(grade).strip().lower().replace("class", "").strip())
+        text = str(grade or "").strip().lower().replace("class", "").strip()
+        return int(text)
     except (TypeError, ValueError):
         return 0
 
@@ -35,87 +30,62 @@ def get_r2_options(r1):
 
 
 def get_r3_options(r1, r2):
-    """Return valid R3 choices for the selected R1 and R2."""
-    if r2 == "Telugu":
-        candidates = ["Hindi", "Sanskrit"]
-    elif r2 == "Hindi":
-        candidates = ["Telugu", "Sanskrit"]
-    else:
-        return []
+    """Return Sanskrit only for Classes 6-8 selections with R2 Hindi.
 
-    return [
-        language for language in candidates
-        if language not in (r1, r2)
-    ]
+    Grade eligibility is enforced by the caller/validator because this
+    helper retains the pre-existing two-argument interface.
+    """
+    if r2 != "Hindi" or "Sanskrit" in (r1, r2):
+        return []
+    return ["Sanskrit"]
 
 
 def get_default_r3(r1, r2):
-    """Choose the requested default where it does not duplicate R1."""
+    """Suggest Sanskrit only when R2 is Hindi."""
     options = get_r3_options(r1, r2)
-
-    preferred = "Hindi" if r2 == "Telugu" else "Telugu"
-
-    if preferred in options:
-        return preferred
-
     return options[0] if options else ""
 
 
 def get_r3_curriculum_info(grade, language):
-    """Describe the MVP source used for the selected third language."""
+    """Describe the source status for the selected third language."""
     number = grade_number(grade)
-
-    if language in ("Telugu", "Hindi") and (number, language) in R3_BRIDGE_LEVELS:
-        bridge_grade = R3_BRIDGE_LEVELS[(number, language)]
-        return {
-            "source_type": "vidhyastra_bridge",
-            "source_label": "Vidhyastra bridge curriculum",
-            "source_grade": f"Class {bridge_grade}",
-            "note": (
-                f"Bridge level based on the Class {bridge_grade} "
-                f"{language} learning sequence. This is a Vidhyastra "
-                "bridge mapping, not an official NCERT R3 equivalence."
-            ),
-        }
-
-    if language == "Sanskrit":
+    if language == "Sanskrit" and number in (6, 7, 8):
         return {
             "source_type": "ncert_resource_to_verify",
-            "source_label": "NCERT Sanskrit resource — level verification pending",
-            "source_grade": grade,
+            "source_label": "Sanskrit curriculum — textbook/level verification pending",
+            "source_grade": f"Class {number}",
             "note": (
-                "Sanskrit is selected, but the exact NCERT R3 level and "
-                "textbook alignment must be verified before adding lessons."
+                "Sanskrit is enabled only when R2 is Hindi. The exact "
+                "textbook, level and chapter sequence must be verified "
+                "for the student's board before lessons are published."
             ),
         }
 
     return {
         "source_type": "not_available",
         "source_label": "Curriculum mapping pending",
-        "source_grade": grade,
-        "note": "The learning sequence for this selection is not mapped yet.",
+        "source_grade": str(grade or ""),
+        "note": "No third-language curriculum is enabled for this selection.",
     }
 
 
 def validate_language_selection(grade, r1, r2, r3=""):
-    """Validate the student's language choices for registration/profile."""
+    """Validate R1/R2/R3 for registration and profile updates."""
     number = grade_number(grade)
 
-    if number not in range(5, 9):
-        return False, "Language selection is currently available for Classes 5–8."
+    if number not in range(6, 11):
+        return False, "Vidhyastra student accounts are available for Classes 6 to 10 only."
 
     if r1 not in R1_OPTIONS:
-        return False, "Choose a valid first language."
+        return False, "Choose English, Telugu or Hindi as R1."
 
     if r2 not in get_r2_options(r1):
         return False, "Choose Telugu or Hindi as R2, different from R1."
 
-    if number == 5:
-        if r3:
-            return False, "R3 is not enabled for Class 5 in this MVP."
-        return True, ""
-
-    if r3 not in get_r3_options(r1, r2):
-        return False, "Choose a valid third language different from R1 and R2."
+    if number in (6, 7, 8) and r2 == "Hindi":
+        if r3 != "Sanskrit":
+            return False, "For Classes 6-8 with Hindi as R2, choose Sanskrit as R3."
+    elif r3:
+        return False, "R3 is available only as Sanskrit when R2 is Hindi in Classes 6-8."
 
     return True, ""

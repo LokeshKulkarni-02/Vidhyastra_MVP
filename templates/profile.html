@@ -91,7 +91,7 @@
                 <select name="third_language" id="third-language">
                     <option value="">Select R1 and R2 first</option>
                 </select>
-                <small>Enabled for Classes 6–8 only. The suggested default follows the MVP rules.</small>
+                <small>For Classes 6–8 only when R2 is Hindi. R3 is Sanskrit.</small>
             </label>
         </div>
         {% endif %}
@@ -168,7 +168,7 @@
         const previous = preserveSelection ? r3Select.value : initialR3;
         const grade = classNumber();
         const shouldShow = grade >= 6 && grade <= 8 &&
-            Boolean(r1Select.value) && Boolean(r2Select.value);
+            r2Select.value === 'Hindi';
 
         r3Wrap.classList.toggle('hidden', !shouldShow);
         r3Select.disabled = !shouldShow;
@@ -176,36 +176,19 @@
         r3Select.innerHTML = '';
 
         if (!shouldShow) {
+            r3Select.value = '';
             const placeholder = document.createElement('option');
             placeholder.value = '';
-            placeholder.textContent = 'R3 is only used for Classes 6–8';
+            placeholder.textContent = 'R3 is available only when R2 is Hindi';
             r3Select.appendChild(placeholder);
             return;
         }
 
-        let choices = r2Select.value === 'Telugu'
-            ? ['Hindi', 'Sanskrit']
-            : ['Telugu', 'Sanskrit'];
-        choices = choices.filter((value) =>
-            value !== r1Select.value && value !== r2Select.value
-        );
-
-        const placeholder = document.createElement('option');
-        placeholder.value = '';
-        placeholder.textContent = 'Select R3';
-        r3Select.appendChild(placeholder);
-
-        choices.forEach((language) => {
-            const option = document.createElement('option');
-            option.value = language;
-            option.textContent = language;
-            r3Select.appendChild(option);
-        });
-
-        const preferred = r2Select.value === 'Telugu' ? 'Hindi' : 'Telugu';
-        r3Select.value = choices.includes(previous)
-            ? previous
-            : (choices.includes(preferred) ? preferred : (choices[0] || ''));
+        const option = document.createElement('option');
+        option.value = 'Sanskrit';
+        option.textContent = 'Sanskrit';
+        r3Select.appendChild(option);
+        r3Select.value = previous === 'Sanskrit' ? previous : 'Sanskrit';
     }
 
     r1Select.addEventListener('change', () => updateSecondLanguage(false));
