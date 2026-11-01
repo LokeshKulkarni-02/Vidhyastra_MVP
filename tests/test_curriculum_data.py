@@ -1,3 +1,4 @@
+
 import unittest
 
 from curriculum_catalog import get_chapter, get_grade_curriculum
@@ -7,6 +8,7 @@ from question_bank import QUESTION_BANK, get_topic_questions
 class CurriculumDataTests(unittest.TestCase):
 
     def test_class_8_pilot_chapter_exists(self):
+
         chapter = get_chapter(
             "Class 8",
             "Mathematics",
@@ -14,13 +16,50 @@ class CurriculumDataTests(unittest.TestCase):
         )
 
         self.assertIsNotNone(chapter)
+
         self.assertEqual(
             chapter["title"],
             "A Square and a Cube"
         )
 
+    def test_class_6_chapters_have_practice_questions(self):
+
+        curriculum = get_grade_curriculum("Class 6")
+
+        chapters = curriculum["subjects"]["Mathematics"]["chapters"]
+
+        self.assertEqual(len(chapters), 10)
+
+        for chapter in chapters:
+
+            with self.subTest(chapter=chapter["title"]):
+
+                self.assertEqual(
+                    chapter["status"],
+                    "question_bank_ready"
+                )
+
+                self.assertEqual(
+                    len(chapter["topics"]),
+                    1
+                )
+
+                topic = chapter["topics"][0]
+
+                self.assertTrue(topic["practice_ready"])
+
+                questions = get_topic_questions(
+                    "Class 6",
+                    "Mathematics",
+                    chapter["id"],
+                    topic["title"]
+                )
+
+                self.assertEqual(len(questions), 3)
+
     def test_other_classes_are_catalogued_but_not_practice_ready(self):
-        for grade in ("Class 6", "Class 7", "Class 9", "Class 10"):
+
+        for grade in ("Class 7", "Class 9", "Class 10"):
 
             with self.subTest(grade=grade):
 
@@ -38,13 +77,10 @@ class CurriculumDataTests(unittest.TestCase):
                     .get("chapters", [])
                 )
 
-                self.assertGreater(
-                    len(chapters),
-                    0,
-                    f"{grade} should have chapter listings"
-                )
+                self.assertGreater(len(chapters), 0)
 
                 for chapter in chapters:
+
                     self.assertEqual(
                         chapter["status"],
                         "catalogued"
@@ -52,12 +88,11 @@ class CurriculumDataTests(unittest.TestCase):
 
                     self.assertEqual(
                         chapter["topics"],
-                        [],
-                        f"{grade}, {chapter['title']} should not "
-                        "claim to have topic-level practice content yet"
+                        []
                     )
 
     def test_question_ids_are_unique(self):
+
         ids = [
             question["id"]
             for question in QUESTION_BANK["questions"]
@@ -69,6 +104,7 @@ class CurriculumDataTests(unittest.TestCase):
         )
 
     def test_every_question_has_valid_answer_and_four_options(self):
+
         for question in QUESTION_BANK["questions"]:
 
             with self.subTest(question_id=question["id"]):
@@ -83,50 +119,39 @@ class CurriculumDataTests(unittest.TestCase):
                     question["options"]
                 )
 
-                self.assertTrue(
-                    question["concept_id"]
-                )
+                self.assertTrue(question["concept_id"])
 
                 self.assertIn(
                     question["difficulty"],
                     {"easy", "medium", "hard"}
                 )
 
-    def test_question_topics_match_catalogue(self):
-        chapter = get_chapter(
-            "Class 8",
-            "Mathematics",
-            "c8-math-ch01"
-        )
-
-        topic_titles = {
-            topic["title"]
-            for topic in chapter["topics"]
-        }
+    def test_question_topics_match_their_own_chapters(self):
 
         for question in QUESTION_BANK["questions"]:
 
-            self.assertEqual(
-                question["grade"],
-                "Class 8"
-            )
+            with self.subTest(question_id=question["id"]):
 
-            self.assertEqual(
-                question["subject"],
-                "Mathematics"
-            )
+                chapter = get_chapter(
+                    question["grade"],
+                    question["subject"],
+                    question["chapter_id"]
+                )
 
-            self.assertEqual(
-                question["chapter_id"],
-                chapter["id"]
-            )
+                self.assertIsNotNone(chapter)
 
-            self.assertIn(
-                question["topic"],
-                topic_titles
-            )
+                topic_titles = {
+                    topic["title"]
+                    for topic in chapter["topics"]
+                }
 
-    def test_topic_question_lookup(self):
+                self.assertIn(
+                    question["topic"],
+                    topic_titles
+                )
+
+    def test_class_8_topic_question_lookup(self):
+
         questions = get_topic_questions(
             "Class 8",
             "Mathematics",
@@ -134,10 +159,7 @@ class CurriculumDataTests(unittest.TestCase):
             "Square Numbers"
         )
 
-        self.assertGreaterEqual(
-            len(questions),
-            5
-        )
+        self.assertGreaterEqual(len(questions), 5)
 
         self.assertTrue(
             all(
@@ -146,7 +168,19 @@ class CurriculumDataTests(unittest.TestCase):
             )
         )
 
+    def test_class_6_question_lookup(self):
+
+        questions = get_topic_questions(
+            "Class 6",
+            "Mathematics",
+            "c6-math-ch01",
+            "Patterns in Mathematics"
+        )
+
+        self.assertEqual(len(questions), 3)
+
     def test_prerequisites_reference_known_concepts(self):
+
         chapter = get_chapter(
             "Class 8",
             "Mathematics",
@@ -160,6 +194,7 @@ class CurriculumDataTests(unittest.TestCase):
         }
 
         for topic in chapter["topics"]:
+
             for concept in topic["concepts"]:
 
                 self.assertTrue(
@@ -168,26 +203,31 @@ class CurriculumDataTests(unittest.TestCase):
                     ).issubset(concept_ids)
                 )
 
-    def test_only_topics_with_questions_are_marked_practice_ready(self):
-        chapter = get_chapter(
-            "Class 8",
-            "Mathematics",
-            "c8-math-ch01"
-        )
+    def test_only_topics_with_questions_are_practice_ready(self):
 
-        for topic in chapter["topics"]:
+        for grade in ("Class 6", "Class 8"):
 
-            questions = get_topic_questions(
-                "Class 8",
-                "Mathematics",
-                chapter["id"],
-                topic["title"]
+            curriculum = get_grade_curriculum(grade)
+
+            chapters = (
+                curriculum["subjects"]["Mathematics"]["chapters"]
             )
 
-            self.assertEqual(
-                bool(questions),
-                topic["practice_ready"]
-            )
+            for chapter in chapters:
+
+                for topic in chapter["topics"]:
+
+                    questions = get_topic_questions(
+                        grade,
+                        "Mathematics",
+                        chapter["id"],
+                        topic["title"]
+                    )
+
+                    self.assertEqual(
+                        bool(questions),
+                        topic["practice_ready"]
+                    )
 
 
 if __name__ == "__main__":

@@ -2004,6 +2004,7 @@ def curriculum():
 # QUIZ AND LEARNING ASSISTANT
 # ==================================================
 
+
 @app.route('/quiz', methods=['GET', 'POST'])
 @role_required('student')
 def quiz():
@@ -2019,108 +2020,306 @@ def quiz():
     chapter = None
     chapter_title = None
 
+    # --------------------------------------------------
+    # LOAD QUESTIONS FROM THE CORRECT CLASS AND CHAPTER
+    # --------------------------------------------------
+
     if chapter_id:
-        # A chapter ID is accepted only when it belongs to the student's class.
+
         chapter = get_chapter(user['grade'], subject, chapter_id)
+
         if not chapter:
             abort(404)
 
         chapter_title = chapter['title']
-        topic_titles = [item['title'] for item in chapter.get('topics', [])]
+
+        topic_titles = [
+            item['title']
+            for item in chapter.get('topics', [])
+        ]
+
+        if not topic_titles:
+            abort(404)
+
         if topic not in topic_titles:
-            topic = topic_titles[0] if topic_titles else ''
+            topic = topic_titles[0]
 
         questions = get_topic_questions(
-            user['grade'], subject, chapter_id, topic
+            user['grade'],
+            subject,
+            chapter_id,
+            topic
         )
+
         if not questions:
             abort(404)
+
         topics = topic_titles
 
     else:
-        # Preserve the original prototype question bank for existing links.
+
+        # Keep compatibility with the original prototype quiz.
         if subject not in TOPIC_BANK:
             subject = 'Mathematics'
+
         if topic not in TOPIC_BANK[subject]:
             topic = next(iter(TOPIC_BANK[subject]))
+
         questions = TOPIC_BANK[subject][topic]
         topics = list(TOPIC_BANK[subject].keys())
 
+    if not questions:
+        abort(404)
+
+    # --------------------------------------------------
+    # PROCESS A SUBMITTED ANSWER
+    # --------------------------------------------------
+
     if request.method == 'POST':
+
+        pending = session.get('pending_quiz_submission')
+
+        submitted_token = request.form.get('form_token', '')
+
         try:
-            qindex = int(request.form.get('qindex', '0'))
+            qindex = int(request.form.get('qindex', ''))
         except (TypeError, ValueError):
-            qindex = 0
-        qindex %= len(questions)
+            qindex = -1
+
+        # Reject missing, expired or previously used forms.
+        if (
+            not pending
+            or not submitted_token
+            or not secrets.compare_digest(
+                str(pending.get('token', '')),
+                submitted_token
+            )
+        ):
+            flash(
+                'This quiz form has expired or was already submitted. '
+                'Please answer the current question.',
+                'warning'
+            )
+
+            return redirect(url_for(
+                'quiz',
+                subject=subject,
+                topic=topic,
+                chapter_id=chapter_id
+            ))
+
+        # The submitted form must match the question that was displayed.
+        if (
+            pending.get('student_id') != user['id']
+            or pending.get('subject') != subject
+            or pending.get('topic') != topic
+            or pending.get('chapter_id') != chapter_id
+            or pending.get('qindex') != qindex
+            or qindex < 0
+            or qindex >= len(questions)
+        ):
+            session.pop('pending_quiz_submission', None)
+
+            flash(
+                'The submitted question did not match your quiz. '
+                'Please try again.',
+                'warning'
+            )
+
+            return redirect(url_for(
+                'quiz',
+                subject=subject,
+                topic=topic,
+                chapter_id=chapter_id
+            ))
 
         question = questions[qindex]
+
+        # Ensure the question itself has not changed.
+        if (
+            pending.get('question_id') != question.get('id', '')
+            or request.form.get('question_id', '')
+            != question.get('id', '')
+        ):
+            session.pop('pending_quiz_submission', None)
+
+            flash(
+                'The question has changed. Please load it again.',
+                'warning'
+            )
+
+            return redirect(url_for(
+                'quiz',
+                subject=subject,
+                topic=topic,
+                chapter_id=chapter_id
+            ))
+
         selected = request.form.get('answer', '')
+
+        # Never accept an answer that was not one of the displayed options.
+        if selected not in question.get('options', []):
+            session.pop('pending_quiz_submission', None)
+
+            flash(
+                'Please select one of the available answer options.',
+                'warning'
+            )
+
+            return redirect(url_for(
+                'quiz',
+                subject=subject,
+                topic=topic,
+                chapter_id=chapter_id
+            ))
+
+        # Consume the token before writing to the database.
+        # A refreshed or replayed POST can no longer record another attempt.
+        session.pop('pending_quiz_submission', None)
+
         correct = int(selected == question['answer'])
         now = datetime.now().isoformat(timespec='seconds')
 
         con = db()
+
         try:
+
             con.execute('''
                 INSERT INTO quiz_attempts
-                (student_id, subject, topic, question, selected, answer,
-                 is_correct, created_at, question_id, concept_id, difficulty)
+                (
+                    student_id,
+                    subject,
+                    topic,
+                    question,
+                    selected,
+                    answer,
+                    is_correct,
+                    created_at,
+                    question_id,
+                    concept_id,
+                    difficulty
+                )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
-                user['id'], subject, topic, question['q'], selected,
-                question['answer'], correct, now,
+                user['id'],
+                subject,
+                topic,
+                question['q'],
+                selected,
+                question['answer'],
+                correct,
+                now,
                 question.get('id', ''),
                 question.get('concept_id', ''),
                 question.get('difficulty', '')
             ))
 
-            # Existing topic progress remains compatible with earlier reports.
+            # Update topic progress.
             row = con.execute('''
-                SELECT * FROM progress
+                SELECT *
+                FROM progress
                 WHERE student_id=? AND subject=? AND topic=?
-            ''', (user['id'], subject, topic)).fetchone()
+            ''', (
+                user['id'],
+                subject,
+                topic
+            )).fetchone()
 
             if row:
+
                 attempts_count = row['attempts'] + 1
                 correct_count = row['correct'] + correct
-                level = min(5, max(1, row['level'] + (
-                    1 if correct and attempts_count >= 3
-                    and correct_count / attempts_count >= 0.8 else 0
-                )))
+
+                level = min(
+                    5,
+                    max(
+                        1,
+                        row['level'] + (
+                            1
+                            if correct
+                            and attempts_count >= 3
+                            and correct_count / attempts_count >= 0.8
+                            else 0
+                        )
+                    )
+                )
+
                 con.execute('''
                     UPDATE progress
                     SET attempts=?, correct=?, level=?, last_seen=?
                     WHERE id=?
-                ''', (attempts_count, correct_count, level, now, row['id']))
+                ''', (
+                    attempts_count,
+                    correct_count,
+                    level,
+                    now,
+                    row['id']
+                ))
+
             else:
+
                 con.execute('''
                     INSERT INTO progress
-                    (student_id, subject, topic, attempts, correct, level, last_seen)
+                    (
+                        student_id,
+                        subject,
+                        topic,
+                        attempts,
+                        correct,
+                        level,
+                        last_seen
+                    )
                     VALUES (?, ?, ?, 1, ?, 1, ?)
-                ''', (user['id'], subject, topic, correct, now))
+                ''', (
+                    user['id'],
+                    subject,
+                    topic,
+                    correct,
+                    now
+                ))
 
+            # Keep the existing XP system.
             xp_earned = 0
+
             if correct:
+
                 xp_earned, new_subject_xp, new_total_xp = award_quiz_xp(
-                    user['id'], subject, con
+                    user['id'],
+                    subject,
+                    con
                 )
+
             else:
+
                 subject_xp_map, new_total_xp = get_student_xp_summary(
-                    user['id'], con
+                    user['id'],
+                    con
                 )
+
                 new_subject_xp = subject_xp_map[subject]
 
-            leaderboard, my_entry, student_ahead, student_behind = get_class_leaderboard(
-                user['grade'], user['school_id'], user['board'],
-                subject_filter=subject,
-                current_student_id=user['id'], con=con
+            leaderboard, my_entry, student_ahead, student_behind = (
+                get_class_leaderboard(
+                    user['grade'],
+                    user['school_id'],
+                    user['board'],
+                    subject_filter=subject,
+                    current_student_id=user['id'],
+                    con=con
+                )
             )
+
             my_rank = my_entry['rank'] if my_entry else 1
+
             con.commit()
 
         except Exception:
+
             con.rollback()
             raise
+
         finally:
+
             con.close()
 
         return render_template(
@@ -2141,19 +2340,43 @@ def quiz():
             student_behind=student_behind
         )
 
-    # Rotate through the topic's questions in order instead of repeating Q1.
+    # --------------------------------------------------
+    # DISPLAY THE NEXT QUESTION
+    # --------------------------------------------------
+
     con = db()
+
     try:
+
         attempted = con.execute('''
             SELECT COUNT(*) AS n
             FROM quiz_attempts
             WHERE student_id=? AND subject=? AND topic=?
-        ''', (user['id'], subject, topic)).fetchone()['n']
+        ''', (
+            user['id'],
+            subject,
+            topic
+        )).fetchone()['n']
+
     finally:
+
         con.close()
 
     qindex = attempted % len(questions)
     question = questions[qindex]
+
+    # Create a unique, one-use submission token.
+    form_token = secrets.token_urlsafe(32)
+
+    session['pending_quiz_submission'] = {
+        'token': form_token,
+        'student_id': user['id'],
+        'subject': subject,
+        'topic': topic,
+        'chapter_id': chapter_id,
+        'qindex': qindex,
+        'question_id': question.get('id', '')
+    }
 
     return render_template(
         'quiz.html',
@@ -2165,7 +2388,8 @@ def quiz():
         question=question,
         qindex=qindex,
         chapter_id=chapter_id,
-        chapter_title=chapter_title
+        chapter_title=chapter_title,
+        form_token=form_token
     )
 
 
