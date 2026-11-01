@@ -16,6 +16,9 @@ def load_question_bank():
 
 
 QUESTION_BANK = load_question_bank()
+from class6_content import build_class6_questions
+
+QUESTION_BANK["questions"].extend(build_class6_questions())
 
 
 def get_topic_questions(grade, subject, chapter_id, topic):

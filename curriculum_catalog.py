@@ -130,6 +130,24 @@ CLASS6_CHAPTERS = [
     )
     for number, title in enumerate(CLASS6_TITLES, start=1)
 ]
+from class6_content import CHAPTER_DATA
+
+for chapter, (chapter_title, questions) in zip(CLASS6_CHAPTERS, CHAPTER_DATA):
+    chapter["status"] = "question_bank_ready"
+    chapter["topics"] = [{
+        "id": f'{chapter["id"]}-practice',
+        "title": chapter_title,
+        "practice_ready": True,
+        "concepts": [
+            {
+                "id": f'{chapter["id"]}-concept-{i}',
+                "title": f"Practice question {i}",
+                "prerequisites": []
+            }
+            for i in range(1, 4)
+        ]
+    }]
+    chapter["outline"] = [chapter_title]
 
 
 # --------------------------------------------------
