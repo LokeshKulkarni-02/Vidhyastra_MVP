@@ -21,7 +21,42 @@ setup instructions.
 
 ------------------------------------------------------------------------
 
-## 1. Project Overview
+## 1. Demo Access for Judges
+
+### Platform Administrator
+
+The application creates the shared demonstration platform-admin account
+when the database is initialized.
+
+-   **Username / email:** `platform.admin@vidhyastra.demo`
+-   **Demo password:** `VidhyastraDemo@2026`
+-   **Login:** Open the website and choose Login. After successful
+    sign-in, platform administrators are routed to the platform
+    dashboard.
+
+**Security note:** These are shared demonstration credentials, not
+production credentials. They are included for this public project
+demonstration. Do not use this account for real student data or a
+production deployment. Change or disable the shared demo password before
+public production use.
+
+### School codes for student and parent registration
+
+  School                   Registration school code
+  ------------------------ --------------------------
+  Vidhyastra Demo School   `VDS-DEMO`
+  HA2026 School            `HA2026`
+  Heisenberg School        `HEISENBERG`
+
+School-code input is normalized to uppercase, so entering `Heisenberg`
+or `HEISENBERG` is treated as the same code. The accompanying
+`enable_demo_schools.py` script updates `app.py` so these school records
+are created automatically when the application initializes its database.
+Existing school records and user links are preserved.
+
+------------------------------------------------------------------------
+
+## 2. Project Overview
 
 Vidhyastra is a web-based learning and quiz platform designed to help
 students access curriculum content, practise questions, attempt quizzes
@@ -31,7 +66,7 @@ The application combines a browser-based frontend, a Python Flask
 backend, question-bank modules and a database to support the learning
 workflow.
 
-## 2. How the Website Works
+## 3. How the Website Works
 
 Vidhyastra follows a client-server structure:
 
@@ -55,7 +90,7 @@ Vidhyastra follows a client-server structure:
 Curriculum and question-bank modules → Database (when needed) → Response
 displayed in the browser.
 
-## 3. Technologies Used
+## 4. Technologies Used
 
   -----------------------------------------------------------------------
   Technology                          Purpose
@@ -83,7 +118,7 @@ displayed in the browser.
                                       data
   -----------------------------------------------------------------------
 
-## 4. Important Project Files
+## 5. Important Project Files
 
   -----------------------------------------------------------------------
   File or folder                      Purpose
@@ -118,7 +153,7 @@ The repository may also contain helper scripts, backup files and tests.
 The files above are the main files relevant to understanding and running
 the website.
 
-## 5. Main Website Features
+## 6. Main Website Features
 
 -   Student registration and login.
 -   Student dashboard and profile pages.
@@ -126,13 +161,14 @@ the website.
 -   Quiz screens for attempting available practice questions.
 -   Answer evaluation and quiz-result display.
 -   Progress and performance information shown in the student interface.
+-   Platform administration for managing school records.
 -   Separate curriculum and question-content modules to keep learning
     content organised.
 
 The subjects, chapters and quiz availability depend on the content
 configured in the project.
 
-## 6. How to Install and Run
+## 7. How to Install and Run
 
 ### Requirements
 
@@ -168,7 +204,7 @@ the computer running the Flask application and is not a public website
 link. Judges using another computer will need a publicly deployed URL to
 access the website.
 
-## 7. Project Structure
+## 8. Project Structure
 
 ``` text
 Vidhyastra_MVP/
@@ -187,7 +223,7 @@ Vidhyastra_MVP/
 
 Some files may be added or updated as the project develops.
 
-## 8. Project Purpose
+## 9. Project Purpose
 
 Vidhyastra aims to make learning practice and revision easier to access
 through a single student-focused website. Its modular structure
